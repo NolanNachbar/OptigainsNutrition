@@ -1,6 +1,5 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import OptigainDumbell from "../assets/react3.svg";
 import {
   UserButton,
   SignedIn,
@@ -15,10 +14,11 @@ const ActionBar: React.FC = () => {
 
   // Navigation items
   const navItems = [
-    { path: "/", label: "Home" },
-    { path: "/workout-plan", label: "Plans" },
-    { path: "/library-page", label: "Library" },
-    { path: "/freestyle-lift", label: "Quick Lift" },
+    { path: "/", label: "Dashboard" },
+    { path: "/diary", label: "Diary" },
+    { path: "/progress", label: "Progress" },
+    { path: "/coaching", label: "Coaching" },
+    { path: "/foods", label: "Foods" },
   ];
 
   return (
@@ -26,12 +26,7 @@ const ActionBar: React.FC = () => {
       <div className="action-bar-container">
         {/* Logo and Brand */}
         <div className="brand-section" onClick={() => navigate("/")}>
-          <img
-            src={OptigainDumbell}
-            alt="Optigains Logo"
-            className="brand-logo"
-          />
-          <h1 className="brand-name">Optigains</h1>
+          <h1 className="brand-name">OptiGains Nutrition</h1>
         </div>
 
         {/* Navigation */}
@@ -54,9 +49,9 @@ const ActionBar: React.FC = () => {
             className="settings-button"
             title="Settings"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v6m0 6v6m3.22-10.22l4.24-4.24m-4.24 13.68l4.24 4.24M1 12h6m6 0h6m-10.22 3.22l-4.24 4.24m13.68-4.24l4.24 4.24"></path>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </button>
           
@@ -66,7 +61,9 @@ const ActionBar: React.FC = () => {
 
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="sign-in-button">Sign In</button>
+              <button className="sign-in-button">
+                Sign In
+              </button>
             </SignInButton>
           </SignedOut>
         </div>

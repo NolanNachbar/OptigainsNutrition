@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { Food, QuickAddFood } from '../utils/types';
 import Actionbar from '../components/Actionbar';
+import { searchFoods, getFavoriteFoods, getQuickAddFoods, deleteFood, updateFood, toggleFavoriteFood } from '../utils/database';
 
 type TabType = 'my-foods' | 'favorites' | 'recent';
 
@@ -25,81 +26,25 @@ const FoodDatabasePage: React.FC = () => {
   const fetchFoods = async () => {
     if (!user) return;
     
-    // TODO: Implement actual database fetching
-    // Mock data
-    const mockMyFoods: Food[] = [
-      {
-        id: '1',
-        name: 'Homemade Protein Shake',
-        brand: 'Custom',
-        serving_size: 350,
-        serving_unit: 'shake',
-        calories_per_100g: 120,
-        protein_per_100g: 20,
-        carbs_per_100g: 8,
-        fat_per_100g: 2,
-        user_id: user.id
-      },
-      {
-        id: '2',
-        name: 'Overnight Oats',
-        brand: 'Custom',
-        serving_size: 250,
-        serving_unit: 'bowl',
-        calories_per_100g: 150,
-        protein_per_100g: 8,
-        carbs_per_100g: 25,
-        fat_per_100g: 3,
-        fiber_per_100g: 4,
-        user_id: user.id
-      }
-    ];
-
-    const mockFavorites: QuickAddFood[] = [
-      {
-        id: '1',
-        user_id: user.id,
-        food_id: '3',
-        food: {
-          id: '3',
-          name: 'Chicken Breast',
-          brand: 'Generic',
-          serving_size: 100,
-          calories_per_100g: 165,
-          protein_per_100g: 31,
-          carbs_per_100g: 0,
-          fat_per_100g: 3.6
-        },
-        frequency: 15,
-        last_used: '2024-06-20'
-      }
-    ];
-
-    const mockRecent: QuickAddFood[] = [
-      {
-        id: '2',
-        user_id: user.id,
-        food_id: '4',
-        food: {
-          id: '4',
-          name: 'Greek Yogurt',
-          brand: 'Chobani',
-          serving_size: 170,
-          serving_unit: 'container',
-          calories_per_100g: 100,
-          protein_per_100g: 10,
-          carbs_per_100g: 6,
-          fat_per_100g: 4
-        },
-        frequency: 8,
-        last_used: '2024-06-22'
-      }
-    ];
-    
-    setMyFoods(mockMyFoods);
-    setFavorites(mockFavorites);
-    setRecentFoods(mockRecent);
-    setLoading(false);
+    setLoading(true);
+    try {
+      // Fetch user's custom foods
+      const userFoods = await searchFoods('', user.id);
+      const customFoods = userFoods.filter(food => food.user_id === user.id);
+      setMyFoods(customFoods);
+      
+      // Fetch favorites
+      const favoriteFoods = await getFavoriteFoods(user.id);
+      setFavorites(favoriteFoods);
+      
+      // Fetch recent foods
+      const recent = await getQuickAddFoods(user.id, 20);
+      setRecentFoods(recent);
+    } catch (error) {
+      console.error('Error fetching foods:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredFoods = () => {
@@ -129,8 +74,18 @@ const FoodDatabasePage: React.FC = () => {
   const handleDeleteFood = async (foodId: string) => {
     if (!confirm('Are you sure you want to delete this food?')) return;
     
-    // TODO: Delete from database
-    setMyFoods(myFoods.filter(food => food.id !== foodId));
+    try {
+      const success = await deleteFood(foodId);
+      if (success) {
+        // Refresh foods
+        await fetchFoods();
+      } else {
+        alert('Failed to delete food.');
+      }
+    } catch (error) {
+      console.error('Error deleting food:', error);
+      alert('Failed to delete food.');
+    }
   };
 
   const handleEditFood = (food: Food) => {
@@ -139,15 +94,22 @@ const FoodDatabasePage: React.FC = () => {
   };
 
   const handleSaveFood = async () => {
-    if (!selectedFood) return;
+    if (!selectedFood || !selectedFood.id) return;
     
-    // TODO: Save to database
-    setMyFoods(myFoods.map(food => 
-      food.id === selectedFood.id ? selectedFood : food
-    ));
-    
-    setShowEditModal(false);
-    setSelectedFood(null);
+    try {
+      const success = await updateFood(selectedFood.id, selectedFood);
+      if (success) {
+        // Refresh foods
+        await fetchFoods();
+        setShowEditModal(false);
+        setSelectedFood(null);
+      } else {
+        alert('Failed to update food.');
+      }
+    } catch (error) {
+      console.error('Error updating food:', error);
+      alert('Failed to update food.');
+    }
   };
 
   const handleExportFoods = () => {
@@ -168,24 +130,25 @@ const FoodDatabasePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100">
+      <div className="min-h-screen bg-gray-900">
         <Actionbar />
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-gray-600">Loading...</div>
+        <div className="pt-24 flex items-center justify-center min-h-screen">
+          <div className="text-gray-400">Loading...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-900">
       <Actionbar />
       
-      <div className="container mx-auto px-4 py-6 max-w-md">
-        <h1 className="text-2xl font-bold mb-6">Food Database</h1>
-        
-        {/* Search Bar */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+      <div className="w-full pt-24 pb-20">
+        <div className="max-w-4xl mx-auto px-4">
+          <h1 className="text-2xl font-bold mb-6">Food Database</h1>
+          <div className="max-w-2xl mx-auto">
+            {/* Search Bar */}
+            <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-4">
           <input
             type="text"
             value={searchQuery}
@@ -196,14 +159,14 @@ const FoodDatabasePage: React.FC = () => {
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-lg shadow-md mb-4">
+        <div className="bg-gray-800 rounded-lg shadow-md mb-4">
           <div className="flex">
             <button
               onClick={() => setActiveTab('my-foods')}
               className={`flex-1 py-3 px-4 font-medium border-b-2 transition-colors ${
                 activeTab === 'my-foods'
                   ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-800'
+                  : 'border-transparent text-gray-400 hover:text-gray-200'
               }`}
             >
               My Foods
@@ -213,7 +176,7 @@ const FoodDatabasePage: React.FC = () => {
               className={`flex-1 py-3 px-4 font-medium border-b-2 transition-colors ${
                 activeTab === 'favorites'
                   ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-800'
+                  : 'border-transparent text-gray-400 hover:text-gray-200'
               }`}
             >
               Favorites
@@ -223,7 +186,7 @@ const FoodDatabasePage: React.FC = () => {
               className={`flex-1 py-3 px-4 font-medium border-b-2 transition-colors ${
                 activeTab === 'recent'
                   ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-800'
+                  : 'border-transparent text-gray-400 hover:text-gray-200'
               }`}
             >
               Recent
@@ -232,9 +195,9 @@ const FoodDatabasePage: React.FC = () => {
         </div>
 
         {/* Foods List */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+        <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-4">
           {filteredFoods().length === 0 ? (
-            <p className="text-gray-500 text-center py-8">
+            <p className="text-gray-400 text-center py-8">
               {searchQuery ? 'No foods found matching your search.' : 'No foods to display.'}
             </p>
           ) : (
@@ -246,7 +209,7 @@ const FoodDatabasePage: React.FC = () => {
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="font-medium">{food.name}</div>
-                          <div className="text-sm text-gray-600">
+                          <div className="text-sm text-gray-400">
                             {food.calories_per_100g} cal • {food.protein_per_100g}g protein per 100g
                           </div>
                         </div>
@@ -277,19 +240,36 @@ const FoodDatabasePage: React.FC = () => {
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="font-medium">{item.food?.name}</div>
-                          <div className="text-sm text-gray-600">
+                          <div className="text-sm text-gray-400">
                             {item.food?.brand} • {item.food?.calories_per_100g} cal per 100g
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-400">
                             Used {item.frequency} times
                           </div>
                         </div>
-                        <button
-                          onClick={() => navigate(`/add-food?foodId=${item.food_id}`)}
-                          className="text-blue-600 hover:text-blue-800 text-sm"
-                        >
-                          Quick Add
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => navigate(`/add-food?foodId=${item.food_id}`)}
+                            className="text-blue-600 hover:text-blue-800 text-sm"
+                          >
+                            Quick Add
+                          </button>
+                          {activeTab === 'recent' && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await toggleFavoriteFood(user!.id, item.food_id);
+                                  await fetchFoods();
+                                } catch (error) {
+                                  console.error('Error toggling favorite:', error);
+                                }
+                              }}
+                              className="text-yellow-600 hover:text-yellow-800 text-sm"
+                            >
+                              Favorite
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -309,17 +289,19 @@ const FoodDatabasePage: React.FC = () => {
           </button>
           <button
             onClick={handleExportFoods}
-            className="px-4 py-3 bg-gray-200 rounded-lg hover:bg-gray-300"
+            className="px-4 py-3 bg-gray-700 rounded-lg hover:bg-gray-600"
           >
             Export
           </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Edit Food Modal */}
       {showEditModal && selectedFood && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Edit Food</h3>
             
             <div className="space-y-4">
@@ -413,7 +395,7 @@ const FoodDatabasePage: React.FC = () => {
                   setShowEditModal(false);
                   setSelectedFood(null);
                 }}
-                className="flex-1 bg-gray-200 py-2 rounded-lg hover:bg-gray-300"
+                className="flex-1 bg-gray-700 py-2 rounded-lg hover:bg-gray-600"
               >
                 Cancel
               </button>

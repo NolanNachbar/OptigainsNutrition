@@ -4,6 +4,8 @@ import { useUser } from '@clerk/clerk-react';
 import { format, addDays, subDays } from 'date-fns';
 import { Meal, NutritionLog, MealType } from '../utils/types';
 import Actionbar from '../components/Actionbar';
+import { getMealsByDate, deleteMeal, getNutritionLog } from '../utils/database';
+import { copyMealsFromDate } from '../utils/nutritionDatabase';
 
 interface MealGroup {
   type: MealType;
@@ -29,67 +31,56 @@ const FoodDiaryPage: React.FC = () => {
   const fetchMeals = async () => {
     if (!user) return;
     
-    // TODO: Implement actual database fetching
-    // For now, using mock data
-    const mockMeals: Meal[] = [
-      {
-        id: '1',
-        user_id: user.id,
-        food_id: '1',
-        food: {
-          id: '1',
-          name: 'Chicken Breast',
-          brand: 'Generic',
-          serving_size: 100,
-          calories_per_100g: 165,
-          protein_per_100g: 31,
-          carbs_per_100g: 0,
-          fat_per_100g: 3.6
-        },
-        amount_grams: 150,
-        meal_type: 'lunch',
-        logged_at: format(selectedDate, 'yyyy-MM-dd')
-      },
-      {
-        id: '2',
-        user_id: user.id,
-        food_id: '2',
-        food: {
-          id: '2',
-          name: 'Brown Rice',
-          brand: 'Generic',
-          serving_size: 100,
-          calories_per_100g: 112,
-          protein_per_100g: 2.6,
-          carbs_per_100g: 23,
-          fat_per_100g: 0.9
-        },
-        amount_grams: 200,
-        meal_type: 'lunch',
-        logged_at: format(selectedDate, 'yyyy-MM-dd')
+    setLoading(true);
+    try {
+      // Fetch meals for the selected date
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const fetchedMeals = await getMealsByDate(user.id, dateStr);
+      setMeals(fetchedMeals);
+      
+      // Fetch nutrition log for the date
+      const log = await getNutritionLog(user.id, dateStr);
+      
+      if (log) {
+        setNutritionLog(log);
+      } else if (fetchedMeals.length > 0) {
+        // Calculate totals from meals if no log exists
+        const totals = fetchedMeals.reduce((acc, meal) => {
+          const multiplier = meal.amount_grams / 100;
+          return {
+            calories: acc.calories + (meal.food?.calories_per_100g || 0) * multiplier,
+            protein: acc.protein + (meal.food?.protein_per_100g || 0) * multiplier,
+            carbs: acc.carbs + (meal.food?.carbs_per_100g || 0) * multiplier,
+            fat: acc.fat + (meal.food?.fat_per_100g || 0) * multiplier,
+            fiber: acc.fiber + (meal.food?.fiber_per_100g || 0) * multiplier
+          };
+        }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+
+        setNutritionLog({
+          clerk_user_id: user.id,
+          date: dateStr,
+          calories: Math.round(totals.calories),
+          protein: Math.round(totals.protein),
+          carbs: Math.round(totals.carbs),
+          fat: Math.round(totals.fat),
+          fiber: Math.round(totals.fiber)
+        });
+      } else {
+        // No meals, set empty nutrition log
+        setNutritionLog({
+          clerk_user_id: user.id,
+          date: dateStr,
+          calories: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0
+        });
       }
-    ];
-
-    setMeals(mockMeals);
-    
-    // Calculate totals for the day
-    const totals = mockMeals.reduce((acc, meal) => {
-      const multiplier = meal.amount_grams / 100;
-      return {
-        calories: acc.calories + (meal.food?.calories_per_100g || 0) * multiplier,
-        protein: acc.protein + (meal.food?.protein_per_100g || 0) * multiplier,
-        carbs: acc.carbs + (meal.food?.carbs_per_100g || 0) * multiplier,
-        fat: acc.fat + (meal.food?.fat_per_100g || 0) * multiplier
-      };
-    }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
-
-    setNutritionLog({
-      user_id: user.id,
-      date: format(selectedDate, 'yyyy-MM-dd'),
-      ...totals
-    });
-
-    setLoading(false);
+    } catch (error) {
+      console.error('Error fetching meals:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const groupMealsByType = (): MealGroup[] => {
@@ -125,21 +116,46 @@ const FoodDiaryPage: React.FC = () => {
   };
 
   const handleCopyPreviousDay = async () => {
-    // TODO: Implement copy from previous day
-    console.log('Copy from previous day');
+    if (!user) return;
+    
+    const fromDate = format(subDays(selectedDate, 1), 'yyyy-MM-dd');
+    const toDate = format(selectedDate, 'yyyy-MM-dd');
+    
+    try {
+      const success = await copyMealsFromDate(user.id, fromDate, toDate);
+      if (success) {
+        // Refresh meals after copying
+        await fetchMeals();
+      } else {
+        alert('No meals found on the previous day to copy.');
+      }
+    } catch (error) {
+      console.error('Error copying meals:', error);
+      alert('Failed to copy meals from previous day.');
+    }
   };
 
-  const deleteMeal = async (mealId: string) => {
-    // TODO: Implement delete meal
-    setMeals(meals.filter(meal => meal.id !== mealId));
+  const handleDeleteMeal = async (mealId: string) => {
+    if (confirm('Are you sure you want to delete this meal?')) {
+      try {
+        const success = await deleteMeal(mealId);
+        if (success) {
+          // Refresh meals after deletion
+          await fetchMeals();
+        }
+      } catch (error) {
+        console.error('Error deleting meal:', error);
+        alert('Failed to delete meal.');
+      }
+    }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100">
+      <div className="min-h-screen bg-gray-900">
         <Actionbar />
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-gray-600">Loading...</div>
+        <div className="pt-24 flex items-center justify-center min-h-screen">
+          <div className="text-gray-400">Loading...</div>
         </div>
       </div>
     );
@@ -148,60 +164,67 @@ const FoodDiaryPage: React.FC = () => {
   const mealGroups = groupMealsByType();
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-900">
       <Actionbar />
       
-      <div className="container mx-auto px-4 py-6 max-w-md">
-        {/* Date Navigation */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+      <div className="w-full pt-24 pb-20">
+        <div className="max-w-4xl mx-auto px-4">
+          <h1 className="text-2xl font-bold mb-6">Food Diary</h1>
+          <div className="max-w-2xl mx-auto">
+            {/* Date Navigation */}
+            <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-6">
           <div className="flex items-center justify-between">
             <button
               onClick={() => handleDateChange('prev')}
-              className="p-2 hover:bg-gray-100 rounded"
+              className="p-2 hover:bg-gray-750 rounded"
             >
-              ←
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
             </button>
             <div className="text-center">
               <div className="font-semibold">{format(selectedDate, 'EEEE')}</div>
-              <div className="text-sm text-gray-600">{format(selectedDate, 'MMM d, yyyy')}</div>
+              <div className="text-sm text-gray-400">{format(selectedDate, 'MMM d, yyyy')}</div>
             </div>
             <button
               onClick={() => handleDateChange('next')}
-              className="p-2 hover:bg-gray-100 rounded"
+              className="p-2 hover:bg-gray-750 rounded"
               disabled={selectedDate >= new Date()}
             >
-              →
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
         </div>
 
         {/* Daily Summary */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="bg-gray-800 rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4">Daily Summary</h2>
           <div className="grid grid-cols-4 gap-4 text-center">
             <div>
               <div className="text-2xl font-bold text-blue-600">
                 {Math.round(nutritionLog?.calories || 0)}
               </div>
-              <div className="text-xs text-gray-600">Calories</div>
+              <div className="text-xs text-gray-400">Calories</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-red-600">
                 {Math.round(nutritionLog?.protein || 0)}g
               </div>
-              <div className="text-xs text-gray-600">Protein</div>
+              <div className="text-xs text-gray-400">Protein</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-green-600">
                 {Math.round(nutritionLog?.carbs || 0)}g
               </div>
-              <div className="text-xs text-gray-600">Carbs</div>
+              <div className="text-xs text-gray-400">Carbs</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-yellow-600">
                 {Math.round(nutritionLog?.fat || 0)}g
               </div>
-              <div className="text-xs text-gray-600">Fat</div>
+              <div className="text-xs text-gray-400">Fat</div>
             </div>
           </div>
         </div>
@@ -216,7 +239,7 @@ const FoodDiaryPage: React.FC = () => {
           </button>
           <button
             onClick={handleCopyPreviousDay}
-            className="bg-gray-200 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors"
+            className="bg-gray-700 text-gray-300 py-3 px-4 rounded-lg hover:bg-gray-600 transition-colors"
           >
             Copy Previous Day
           </button>
@@ -224,11 +247,11 @@ const FoodDiaryPage: React.FC = () => {
 
         {/* Meals by Type */}
         {mealGroups.map(group => (
-          <div key={group.type} className="bg-white rounded-lg shadow-md p-4 mb-4">
+          <div key={group.type} className="bg-gray-800 rounded-lg shadow-md p-4 mb-4">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-semibold capitalize">{group.type}</h3>
               {group.totalCalories > 0 && (
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-gray-400">
                   {group.totalCalories} cal
                 </div>
               )}
@@ -248,15 +271,17 @@ const FoodDiaryPage: React.FC = () => {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="font-medium">{meal.food?.name}</div>
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-gray-400">
                           {meal.amount_grams}g • {Math.round((meal.food?.calories_per_100g || 0) * meal.amount_grams / 100)} cal
                         </div>
                       </div>
                       <button
-                        onClick={() => deleteMeal(meal.id!)}
+                        onClick={() => handleDeleteMeal(meal.id!)}
                         className="text-red-500 hover:text-red-700 ml-2"
                       >
-                        ×
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -273,7 +298,7 @@ const FoodDiaryPage: React.FC = () => {
         ))}
 
         {/* Notes Section */}
-        <div className="bg-white rounded-lg shadow-md p-4">
+        <div className="bg-gray-800 rounded-lg shadow-md p-4">
           <h3 className="font-semibold mb-2">Notes</h3>
           <textarea
             className="w-full p-2 border rounded-lg resize-none"
@@ -285,6 +310,8 @@ const FoodDiaryPage: React.FC = () => {
               console.log('Update notes:', e.target.value);
             }}
           />
+            </div>
+          </div>
         </div>
       </div>
     </div>

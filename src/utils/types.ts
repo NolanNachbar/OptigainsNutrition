@@ -43,7 +43,9 @@ export interface Food {
   fiber_per_100g?: number;
   sugar_per_100g?: number;
   saturated_fat_per_100g?: number;
+  sodium_per_100g?: number;
   user_id?: string; // null for public foods
+  clerk_user_id?: string; // Alternative field name for user-created foods
   is_verified?: boolean;
   created_at?: string;
 }
@@ -54,7 +56,7 @@ export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 // Meal Entry
 export interface Meal {
   id?: string;
-  user_id: string;
+  clerk_user_id: string;
   food_id: string;
   food?: Food; // Populated when fetching
   amount_grams: number;
@@ -67,7 +69,7 @@ export interface Meal {
 // Daily Nutrition Log
 export interface NutritionLog {
   id?: string;
-  user_id: string;
+  clerk_user_id: string;
   date: string; // YYYY-MM-DD
   calories: number;
   protein: number;
@@ -84,7 +86,7 @@ export interface NutritionLog {
 // Weight Entry
 export interface WeightEntry {
   id?: string;
-  user_id: string;
+  clerk_user_id: string;
   date: string;
   weight: number; // in kg
   body_fat_percentage?: number;
@@ -105,7 +107,7 @@ export interface ProgressData {
 // Meal Template
 export interface MealTemplate {
   id?: string;
-  user_id: string;
+  clerk_user_id: string;
   name: string;
   description?: string;
   foods: {
@@ -119,17 +121,18 @@ export interface MealTemplate {
 // Quick Add Food
 export interface QuickAddFood {
   id?: string;
-  user_id: string;
+  clerk_user_id: string;
   food_id: string;
   food?: Food;
   frequency: number; // Times used
   last_used: string;
+  is_favorite?: boolean;
 }
 
 // Weekly Check-in
 export interface WeeklyCheckIn {
   id?: string;
-  user_id: string;
+  clerk_user_id: string;
   week_start_date: string;
   average_weight: number;
   average_calories: number;

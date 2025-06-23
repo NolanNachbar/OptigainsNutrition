@@ -42,7 +42,7 @@ const App: React.FC = () => {
     <ClerkProvider publishableKey={clerkPubKey}>
       <DateProvider>
         <DatabaseInitializer>
-          <Suspense fallback={<div>Loading...</div>}>
+          <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
             <Router>
               <Routes>
                 {/* Public routes */}

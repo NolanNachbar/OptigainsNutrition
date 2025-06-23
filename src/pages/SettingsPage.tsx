@@ -1,326 +1,181 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
 import ActionBar from '../components/Actionbar';
-import { loadSettings, saveSettings, AppSettings } from '../utils/settings';
+import { getUserProfile, createOrUpdateUserProfile } from '../utils/database';
+import { UserNutritionProfile } from '../utils/types';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
-  const [settings, setSettings] = useState<AppSettings>(loadSettings());
+  const { user } = useUser();
+  const [profile, setProfile] = useState<UserNutritionProfile | null>(null);
+  const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
+  const [loading, setLoading] = useState(true);
 
-  const handleSettingChange = <K extends keyof AppSettings>(
-    key: K,
-    value: AppSettings[K]
-  ) => {
-    const updatedSettings = { ...settings, [key]: value };
-    setSettings(updatedSettings);
-    saveSettings(updatedSettings);
+  React.useEffect(() => {
+    fetchProfile();
+  }, [user]);
+
+  const fetchProfile = async () => {
+    if (!user) return;
+    
+    try {
+      const userProfile = await getUserProfile(user.id);
+      if (userProfile) {
+        setProfile(userProfile);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const restTimeOptions = [
-    { label: '30 seconds', value: 30 },
-    { label: '1 minute', value: 60 },
-    { label: '1.5 minutes', value: 90 },
-    { label: '2 minutes', value: 120 },
-    { label: '3 minutes', value: 180 },
-    { label: '5 minutes', value: 300 },
-  ];
+  const handleSaveSettings = async () => {
+    if (!profile) return;
+    
+    try {
+      await createOrUpdateUserProfile(profile);
+      alert('Settings saved successfully!');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      alert('Failed to save settings.');
+    }
+  };
 
-  const weightIncrementOptions = [
-    { label: '2.5 lbs', value: 2.5 },
-    { label: '5 lbs', value: 5 },
-    { label: '10 lbs', value: 10 },
-  ];
+  if (loading) {
+    return (
+      <div className="settings-page min-h-screen bg-gray-900">
+        <ActionBar />
+        <div className="settings-content pt-24">
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="text-gray-400">Loading...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="settings-page">
+    <div className="settings-page min-h-screen bg-gray-900">
       <ActionBar />
-      <div className="settings-content">
-        <div className="settings-header">
-          <button 
+      <div className="settings-content w-full pt-24 pb-20">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="settings-header mb-6">
+            <button 
             onClick={() => navigate('/')} 
-            className="back-button"
+            className="back-button flex items-center text-gray-400 hover:text-gray-200 mb-4"
           >
-            ← Back
-          </button>
-          <h1>Settings</h1>
-        </div>
-
-        <div className="settings-sections">
-          {/* Timer Settings */}
-          <div className="settings-section">
-            <h2>Rest Timers</h2>
-            <div className="setting-item">
-              <div className="setting-info">
-                <label>Show Rest Timers</label>
-                <p className="setting-description">
-                  Display countdown timers between sets during workouts
-                </p>
-              </div>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={settings.showRestTimers}
-                  onChange={(e) => handleSettingChange('showRestTimers', e.target.checked)}
-                />
-                <span className="toggle-slider"></span>
-              </label>
-            </div>
-            
-            {settings.showRestTimers && (
-              <div className="setting-item">
-                <div className="setting-info">
-                  <label>Default Rest Time</label>
-                  <p className="setting-description">
-                    Default time between sets when rest timers are enabled
-                  </p>
-                </div>
-                <select
-                  value={settings.defaultRestTime}
-                  onChange={(e) => handleSettingChange('defaultRestTime', Number(e.target.value))}
-                  className="setting-select"
-                >
-                  {restTimeOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+            </button>
+            <h1 className="text-2xl font-bold">Settings</h1>
           </div>
-
-          {/* Weight Settings */}
-          <div className="settings-section">
-            <h2>Weight Increments</h2>
+          <div className="max-w-2xl mx-auto">
+            <div className="settings-sections">
+              {/* Profile Settings */}
+              <div className="settings-section bg-gray-800 rounded-lg shadow-md p-6 mb-4">
+            <h2 className="text-lg font-semibold mb-4">Profile</h2>
             <div className="setting-item">
               <div className="setting-info">
-                <label>Default Weight Increment</label>
+                <label>Activity Level</label>
                 <p className="setting-description">
-                  Default increment when adjusting weights
+                  Your typical daily activity level affects calorie needs
                 </p>
               </div>
               <select
-                value={settings.defaultWeightIncrement}
-                onChange={(e) => handleSettingChange('defaultWeightIncrement', Number(e.target.value))}
-                className="setting-select"
+                value={profile?.activity_level || 'moderate'}
+                onChange={(e) => setProfile(prev => prev ? { ...prev, activity_level: e.target.value as any } : null)}
+                className="setting-select w-full p-2 border rounded-lg"
               >
-                {weightIncrementOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+                <option value="sedentary">Sedentary (little or no exercise)</option>
+                <option value="light">Light (exercise 1-3 days/week)</option>
+                <option value="moderate">Moderate (exercise 3-5 days/week)</option>
+                <option value="active">Active (exercise 6-7 days/week)</option>
+                <option value="very_active">Very Active (physical job or 2x/day)</option>
               </select>
             </div>
           </div>
 
-          {/* Display Settings */}
-          <div className="settings-section">
-            <h2>Display Preferences</h2>
+          {/* Units Settings */}
+          <div className="settings-section bg-gray-800 rounded-lg shadow-md p-6 mb-4">
+            <h2 className="text-lg font-semibold mb-4">Units</h2>
             <div className="setting-item">
               <div className="setting-info">
-                <label>Show Volume Metrics</label>
+                <label>Measurement System</label>
                 <p className="setting-description">
-                  Display total volume and other workout metrics
+                  Choose between metric (kg, cm) or imperial (lbs, inches)
                 </p>
               </div>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={settings.showVolumeMetrics}
-                  onChange={(e) => handleSettingChange('showVolumeMetrics', e.target.checked)}
-                />
-                <span className="toggle-slider"></span>
-              </label>
+              <select
+                value={units}
+                onChange={(e) => setUnits(e.target.value as 'metric' | 'imperial')}
+                className="setting-select w-full p-2 border rounded-lg"
+              >
+                <option value="metric">Metric</option>
+                <option value="imperial">Imperial</option>
+              </select>
             </div>
-            
+          </div>
+
+          {/* Macro Targets */}
+          <div className="settings-section bg-gray-800 rounded-lg shadow-md p-6 mb-4">
+            <h2 className="text-lg font-semibold mb-4">Default Macro Targets</h2>
             <div className="setting-item">
               <div className="setting-info">
-                <label>Collapsible Exercises</label>
+                <label>Fiber Target</label>
                 <p className="setting-description">
-                  Allow exercises to be collapsed in workout editor
+                  Daily fiber goal in grams
                 </p>
               </div>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={settings.collapsibleExercises}
-                  onChange={(e) => handleSettingChange('collapsibleExercises', e.target.checked)}
-                />
-                <span className="toggle-slider"></span>
-              </label>
+              <input
+                type="number"
+                value={profile?.target_macros.fiber || 30}
+                onChange={(e) => setProfile(prev => prev ? {
+                  ...prev,
+                  target_macros: { ...prev.target_macros, fiber: Number(e.target.value) }
+                } : null)}
+                className="setting-input w-full p-2 border rounded-lg"
+                min="0"
+                max="100"
+              />
+            </div>
+          </div>
+
+          {/* Data Management */}
+          <div className="settings-section bg-gray-800 rounded-lg shadow-md p-6 mb-4">
+            <h2 className="text-lg font-semibold mb-4">Data Management</h2>
+            <div className="setting-item">
+              <button
+                onClick={() => {
+                  if (confirm('This will export all your nutrition data. Continue?')) {
+                    // TODO: Implement data export
+                    alert('Data export coming soon!');
+                  }
+                }}
+                className="export-button bg-gray-700 text-gray-300 py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Export My Data
+              </button>
+            </div>
+          </div>
+
+          {/* Save Button */}
+          <div className="settings-actions">
+            <button
+              onClick={handleSaveSettings}
+              className="save-button bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
+              disabled={!profile}
+            >
+              Save Settings
+            </button>
+          </div>
             </div>
           </div>
         </div>
       </div>
-
-      <style>{`
-        .settings-page {
-          background: #121212;
-          min-height: 100vh;
-          color: #ffffff;
-        }
-
-        .settings-content {
-          max-width: 800px;
-          margin: 0 auto;
-          padding: 2rem;
-        }
-
-        .settings-header {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          margin-bottom: 2rem;
-        }
-
-        .back-button {
-          background: none;
-          border: none;
-          color: #2196F3;
-          font-size: 1rem;
-          cursor: pointer;
-          padding: 0.5rem;
-          display: flex;
-          align-items: center;
-        }
-
-        .back-button:hover {
-          color: #1976D2;
-        }
-
-        .settings-header h1 {
-          margin: 0;
-        }
-
-        .settings-sections {
-          display: flex;
-          flex-direction: column;
-          gap: 2rem;
-        }
-
-        .settings-section {
-          background: #1e1e1e;
-          border-radius: 12px;
-          padding: 1.5rem;
-          border: 1px solid #333;
-        }
-
-        .settings-section h2 {
-          margin: 0 0 1.5rem 0;
-          color: #ffffff;
-          font-size: 1.25rem;
-        }
-
-        .setting-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 1rem 0;
-          border-bottom: 1px solid #333;
-        }
-
-        .setting-item:last-child {
-          border-bottom: none;
-        }
-
-        .setting-info {
-          flex: 1;
-        }
-
-        .setting-info label {
-          display: block;
-          font-size: 1rem;
-          font-weight: 500;
-          margin-bottom: 0.25rem;
-        }
-
-        .setting-description {
-          font-size: 0.875rem;
-          color: #888;
-          margin: 0;
-        }
-
-        .toggle-switch {
-          position: relative;
-          display: inline-block;
-          width: 50px;
-          height: 24px;
-        }
-
-        .toggle-switch input {
-          opacity: 0;
-          width: 0;
-          height: 0;
-        }
-
-        .toggle-slider {
-          position: absolute;
-          cursor: pointer;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: #333;
-          transition: .4s;
-          border-radius: 24px;
-        }
-
-        .toggle-slider:before {
-          position: absolute;
-          content: "";
-          height: 18px;
-          width: 18px;
-          left: 3px;
-          bottom: 3px;
-          background-color: white;
-          transition: .4s;
-          border-radius: 50%;
-        }
-
-        .toggle-switch input:checked + .toggle-slider {
-          background-color: #2196F3;
-        }
-
-        .toggle-switch input:checked + .toggle-slider:before {
-          transform: translateX(26px);
-        }
-
-        .setting-select {
-          background: #2a2a2a;
-          color: #ffffff;
-          border: 1px solid #444;
-          border-radius: 6px;
-          padding: 0.5rem 1rem;
-          font-size: 1rem;
-          cursor: pointer;
-          min-width: 150px;
-        }
-
-        .setting-select:hover {
-          border-color: #666;
-        }
-
-        .setting-select:focus {
-          outline: none;
-          border-color: #2196F3;
-        }
-
-        @media (max-width: 768px) {
-          .settings-content {
-            padding: 1rem;
-          }
-
-          .setting-item {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 1rem;
-          }
-
-          .setting-select {
-            width: 100%;
-          }
-        }
-      `}</style>
     </div>
   );
 };
