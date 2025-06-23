@@ -1,0 +1,228 @@
+.react-calendar {
+  background-color: #2e2e2e; /* Dark background */
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 10px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  aspect-ratio: 1;
+  font-size: 16px;
+  min-width: 250px;
+}
+
+/* Calendar Navigation Header */
+.react-calendar__navigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  height: 40px;
+}
+
+.react-calendar__navigation button {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 1rem;
+  min-width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+  background-color: #505050;
+  border-radius: 5px;
+}
+
+.react-calendar__navigation button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.react-calendar__navigation__label {
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 0 0.5rem;
+  min-width: 100px;
+  text-align: center;
+}
+
+.react-calendar__tile {
+  background-color: #3b3b3b; /* Darker tiles */
+  color: white;
+  border-radius: 5px;
+  position: relative; /* Required for the dot */
+  padding: 0.5rem 0.25rem;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.react-calendar__tile:hover {
+  background-color: #505050; /* Highlighted on hover */
+}
+
+.react-calendar__tile--active {
+  background-color: #4caf50; /* Green background for active days */
+  color: white;
+}
+
+.react-calendar__tile--now {
+  background-color: #ffd700; /* Yellow for today's date */
+  color: black;
+}
+.react-calendar__tile--highlight {
+  background-color: #a52222; /* Red for selected days */
+  color: white;
+}
+
+.react-calendar__tile--dot::after {
+  content: "";
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  background-color: green; /* Mark workouts with a dot */
+  border-radius: 50%;
+}
+
+.react-calendar__tile--dot {
+  position: relative;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 1024px) {
+  .react-calendar {
+    font-size: 14px;
+    padding: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .react-calendar {
+    padding: 5px;
+    font-size: 12px;
+    min-width: 250px;
+  }
+
+  .react-calendar__navigation {
+    height: 32px;
+    margin-bottom: 0.25rem;
+  }
+
+  .react-calendar__navigation button {
+    padding: 2px;
+    font-size: 0.9rem;
+    min-width: 32px;
+    height: 32px;
+  }
+
+  .react-calendar__navigation__label {
+    font-size: 0.9rem;
+    min-width: 60px;
+  }
+
+  .react-calendar__tile {
+    padding: 0.25rem;
+    font-size: 0.8rem;
+  }
+
+  .react-calendar__month-view__days__day {
+    font-size: 0.8rem;
+  }
+
+  .react-calendar__month-view__weekdays {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .react-calendar {
+    padding: 2px;
+    font-size: 11px;
+    min-width: 200px;
+  }
+
+  .react-calendar__navigation {
+    height: 28px;
+  }
+
+  .react-calendar__navigation button {
+    padding: 1px;
+    font-size: 0.8rem;
+    min-width: 28px;
+    height: 28px;
+  }
+
+  .react-calendar__navigation__label {
+    font-size: 0.8rem;
+    min-width: 50px;
+    padding: 0 0.25rem;
+  }
+
+  .react-calendar__tile {
+    padding: 0.15rem;
+    font-size: 0.7rem;
+  }
+
+  .react-calendar__month-view__days__day {
+    font-size: 0.75rem;
+  }
+
+  .react-calendar__month-view__weekdays {
+    font-size: 0.75rem;
+  }
+
+  .react-calendar__tile--dot::after {
+    width: 2px;
+    height: 2px;
+    bottom: 1px;
+  }
+}
+
+@media (max-width: 320px) {
+  .react-calendar {
+    padding: 1px;
+    font-size: 10px;
+    min-width: 180px;
+  }
+
+  .react-calendar__navigation {
+    height: 24px;
+  }
+
+  .react-calendar__navigation button {
+    padding: 1px;
+    font-size: 0.7rem;
+    min-width: 24px;
+    height: 24px;
+  }
+
+  .react-calendar__navigation__label {
+    font-size: 0.7rem;
+    min-width: 40px;
+  }
+
+  .react-calendar__tile {
+    padding: 0.1rem;
+    font-size: 0.65rem;
+  }
+
+  .react-calendar__tile--dot::after {
+    width: 2px;
+    height: 2px;
+    bottom: 1px;
+  }
+}

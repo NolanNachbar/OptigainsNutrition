@@ -1,0 +1,20 @@
+{
+  "name": "OptiGains - Nutrition Tracker",
+  "short_name": "OptiNutrition",
+  "description": "Track your nutrition and optimize your diet for muscle growth",
+  "theme_color": "#4A90E2",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "fitness", "sports"]
+}

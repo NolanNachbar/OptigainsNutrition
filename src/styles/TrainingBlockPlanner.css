@@ -1,0 +1,270 @@
+/* Training Block Planner Styles */
+.training-block-planner {
+  width: 100%;
+}
+
+.planner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.planner-header h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.5rem;
+}
+
+/* Current Block Display */
+.current-block {
+  margin-bottom: 2rem;
+}
+
+.block-card {
+  background: #1e1e1e;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  border: 1px solid #404040;
+}
+
+.block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.block-header h3 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.25rem;
+}
+
+.split-badge {
+  background: #2196F3;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Progress Bar */
+.block-progress {
+  margin-bottom: 1.5rem;
+}
+
+.progress-bar {
+  background: #2a2a2a;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2196F3 0%, #64B5F6 100%);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.875rem;
+  color: #b0b0b0;
+}
+
+/* Block Details Grid */
+.block-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #2a2a2a;
+  border-radius: 6px;
+  border: 1px solid #404040;
+}
+
+.detail-item .label {
+  font-weight: 600;
+  color: #b0b0b0;
+  font-size: 0.875rem;
+}
+
+.detail-item .value {
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 0.875rem;
+}
+
+/* Deload Notice */
+.deload-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: #ffc107;
+  color: #000;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.deload-icon {
+  font-size: 1.25rem;
+}
+
+/* Block Notes */
+.block-notes {
+  background: #2a2a2a;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.block-notes p {
+  margin: 0;
+  color: #e0e0e0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.block-notes h4 {
+  margin: 0 0 0.5rem 0;
+  color: #ffffff;
+  font-size: 1rem;
+}
+
+/* Block Actions */
+.block-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Template Grid */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.template-card {
+  background: #2a2a2a;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.template-card:hover {
+  border-color: #404040;
+  transform: translateY(-2px);
+}
+
+.template-card.selected {
+  border-color: #2196F3;
+  background: #1a237e;
+}
+
+.template-card h4 {
+  margin: 0 0 0.5rem 0;
+  color: #ffffff;
+  font-size: 1.125rem;
+}
+
+.template-card p {
+  margin: 0 0 0.5rem 0;
+  color: #b0b0b0;
+  font-size: 0.875rem;
+}
+
+.template-duration {
+  display: inline-block;
+  background: #404040;
+  color: #ffffff;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Custom Form */
+.custom-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  color: #e0e0e0;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.form-group .input-field {
+  background: #2a2a2a;
+  border: 1px solid #404040;
+  border-radius: 6px;
+  padding: 0.75rem;
+  color: #ffffff;
+  font-size: 1rem;
+}
+
+.form-group textarea.input-field {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Modal Overrides */
+.modal-content.large {
+  max-width: 800px;
+  width: 90%;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .planner-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  
+  .block-header {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+  
+  .block-details {
+    grid-template-columns: 1fr;
+  }
+  
+  .block-actions {
+    flex-direction: column;
+  }
+  
+  .block-actions button {
+    width: 100%;
+  }
+  
+  .template-grid {
+    grid-template-columns: 1fr;
+  }
+}

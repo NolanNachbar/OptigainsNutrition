@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Cache - OptiGains</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            background-color: #4A90E2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #357ABD;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>OptiGains Cache Management</h1>
+    <p>Use these tools to clear cached data and service workers if you're experiencing issues.</p>
+    
+    <button onclick="clearAllData()">Clear All Cache & Service Workers</button>
+    <button onclick="unregisterServiceWorkers()">Unregister Service Workers Only</button>
+    <button onclick="clearCachesOnly()">Clear Caches Only</button>
+    
+    <div id="status"></div>
+    
+    <script>
+        function log(message) {
+            const status = document.getElementById('status');
+            status.innerHTML += message + '<br>';
+            console.log(message);
+        }
+        
+        async function clearAllData() {
+            log('Starting complete cleanup...');
+            
+            // Unregister all service workers
+            await unregisterServiceWorkers();
+            
+            // Clear all caches
+            await clearCachesOnly();
+            
+            log('✅ Complete cleanup finished!');
+            log('Redirecting to home page in 3 seconds...');
+            
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
+        }
+        
+        async function unregisterServiceWorkers() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (let registration of registrations) {
+                        const success = await registration.unregister();
+                        if (success) {
+                            log(`✅ Unregistered service worker: ${registration.scope}`);
+                        } else {
+                            log(`❌ Failed to unregister: ${registration.scope}`);
+                        }
+                    }
+                    log('✅ All service workers unregistered');
+                } catch (error) {
+                    log(`❌ Error unregistering service workers: ${error.message}`);
+                }
+            } else {
+                log('ℹ️ Service workers not supported in this browser');
+            }
+        }
+        
+        async function clearCachesOnly() {
+            if ('caches' in window) {
+                try {
+                    const cacheNames = await caches.keys();
+                    for (let cacheName of cacheNames) {
+                        const success = await caches.delete(cacheName);
+                        if (success) {
+                            log(`✅ Deleted cache: ${cacheName}`);
+                        } else {
+                            log(`❌ Failed to delete cache: ${cacheName}`);
+                        }
+                    }
+                    log('✅ All caches cleared');
+                } catch (error) {
+                    log(`❌ Error clearing caches: ${error.message}`);
+                }
+            } else {
+                log('ℹ️ Cache API not supported in this browser');
+            }
+        }
+    </script>
+</body>
+</html>

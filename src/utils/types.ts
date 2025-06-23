@@ -1,0 +1,145 @@
+// src/utils/types.ts
+
+// Nutrition Goals
+export type GoalType = 'maintenance' | 'gain' | 'cut' | 'recomp';
+export type CoachingMode = 'coached' | 'manual' | 'collaborative';
+
+// Macronutrients
+export interface Macros {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  sugar?: number;
+  saturatedFat?: number;
+}
+
+// User Profile
+export interface UserNutritionProfile {
+  id?: string;
+  clerk_user_id: string;
+  tdee_estimate: number;
+  coaching_mode: CoachingMode;
+  goal_type: GoalType;
+  target_macros: Macros;
+  activity_level: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Food Database
+export interface Food {
+  id?: string;
+  name: string;
+  brand?: string;
+  barcode?: string;
+  serving_size: number; // in grams
+  serving_unit?: string; // e.g., "cup", "slice", "piece"
+  calories_per_100g: number;
+  protein_per_100g: number;
+  carbs_per_100g: number;
+  fat_per_100g: number;
+  fiber_per_100g?: number;
+  sugar_per_100g?: number;
+  saturated_fat_per_100g?: number;
+  user_id?: string; // null for public foods
+  is_verified?: boolean;
+  created_at?: string;
+}
+
+// Meal Types
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+// Meal Entry
+export interface Meal {
+  id?: string;
+  user_id: string;
+  food_id: string;
+  food?: Food; // Populated when fetching
+  amount_grams: number;
+  meal_type: MealType;
+  logged_at: string;
+  nutrition_log_id?: string;
+  notes?: string;
+}
+
+// Daily Nutrition Log
+export interface NutritionLog {
+  id?: string;
+  user_id: string;
+  date: string; // YYYY-MM-DD
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  weight?: number; // Morning weight in kg
+  notes?: string;
+  adherence_score?: number; // 0-100
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Weight Entry
+export interface WeightEntry {
+  id?: string;
+  user_id: string;
+  date: string;
+  weight: number; // in kg
+  body_fat_percentage?: number;
+  notes?: string;
+  created_at?: string;
+}
+
+// Progress Data
+export interface ProgressData {
+  weightEntries: WeightEntry[];
+  nutritionLogs: NutritionLog[];
+  averageCalories: number;
+  averageMacros: Macros;
+  tdeeEstimate: number;
+  weeklyWeightChange: number;
+}
+
+// Meal Template
+export interface MealTemplate {
+  id?: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  foods: {
+    food_id: string;
+    amount_grams: number;
+  }[];
+  total_macros: Macros;
+  created_at?: string;
+}
+
+// Quick Add Food
+export interface QuickAddFood {
+  id?: string;
+  user_id: string;
+  food_id: string;
+  food?: Food;
+  frequency: number; // Times used
+  last_used: string;
+}
+
+// Weekly Check-in
+export interface WeeklyCheckIn {
+  id?: string;
+  user_id: string;
+  week_start_date: string;
+  average_weight: number;
+  average_calories: number;
+  average_macros: Macros;
+  adherence_percentage: number;
+  energy_level: 1 | 2 | 3 | 4 | 5;
+  hunger_level: 1 | 2 | 3 | 4 | 5;
+  training_performance: 1 | 2 | 3 | 4 | 5;
+  notes?: string;
+  photos?: string[]; // URLs to progress photos
+  macro_adjustment?: Macros; // New targets after check-in
+  created_at?: string;
+}
