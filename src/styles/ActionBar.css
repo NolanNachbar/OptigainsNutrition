@@ -1,4 +1,4 @@
-/* Professional ActionBar Styles */
+/* Apple-inspired ActionBar Styles */
 .action-bar {
   position: fixed;
   top: 0;
@@ -7,12 +7,12 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background: rgba(10, 10, 10, 0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   z-index: 1000;
-  box-shadow: 0 2px 24px rgba(0, 0, 0, 0.7);
+  transition: all var(--animation-normal) var(--easing-default);
 }
 
 .action-bar-container {
@@ -23,6 +23,7 @@
   max-width: 1200px;
   padding: 0 2rem;
   height: 64px;
+  position: relative;
 }
 
 /* Brand Section */
@@ -31,97 +32,118 @@
   align-items: center;
   gap: 0.75rem;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: all var(--animation-normal) var(--easing-default);
+  padding: 0.5rem;
+  margin: -0.5rem;
+  border-radius: 12px;
 }
 
 .brand-section:hover {
-  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.brand-logo-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .brand-logo {
-  width: 36px;
-  height: 36px;
-  filter: brightness(0) invert(1);
-  transition: transform 0.2s ease;
+  width: 32px;
+  height: 32px;
+  color: var(--primary);
+  transition: all var(--animation-normal) var(--easing-spring);
 }
 
 .brand-section:hover .brand-logo {
-  transform: scale(1.05);
+  transform: rotate(180deg) scale(1.1);
 }
 
 .brand-name {
   margin: 0;
-  font-size: 1.375rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #ffffff 0%, #a0a0a0 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  transition: color var(--animation-normal) var(--easing-default);
 }
 
 /* Navigation Section */
 .nav-section {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.5rem;
   flex: 1;
   justify-content: center;
-  max-width: 600px;
+  max-width: 500px;
   margin: 0 2rem;
+  padding: 0.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .nav-item {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
+  padding: 0.5rem 1rem;
   background: transparent;
   border: none;
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-tertiary);
   font-size: 0.875rem;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--animation-fast) var(--easing-default);
   position: relative;
+  min-width: 80px;
 }
 
 .nav-item:hover {
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-item.active {
-  color: var(--primary);
-  background: rgba(0, 102, 255, 0.12);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 600;
 }
 
-.nav-item.active::after {
-  content: '';
+.nav-indicator {
   position: absolute;
-  bottom: 0;
+  bottom: -2px;
   left: 50%;
   transform: translateX(-50%);
-  width: 32px;
-  height: 3px;
+  width: 4px;
+  height: 4px;
   background: var(--primary);
-  border-radius: 3px 3px 0 0;
+  border-radius: 50%;
+  opacity: 0;
+  animation: indicatorFadeIn var(--animation-normal) var(--easing-spring);
 }
 
-.nav-icon {
-  font-size: 1.125rem;
-  line-height: 1;
+.nav-item.active .nav-indicator {
+  opacity: 1;
+}
+
+@keyframes indicatorFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
 }
 
 .nav-label {
-  display: none;
-}
-
-@media (min-width: 768px) {
-  .nav-label {
-    display: inline;
-  }
+  display: inline;
+  transition: all var(--animation-fast) var(--easing-default);
 }
 
 /* User Section */
@@ -129,6 +151,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  position: relative;
 }
 
 .settings-button {
@@ -138,51 +161,105 @@
   width: 40px;
   height: 40px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--animation-normal) var(--easing-default);
+  position: relative;
+  overflow: hidden;
+}
+
+.settings-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: all var(--animation-slow) var(--easing-default);
 }
 
 .settings-button:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: white;
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
 }
 
-.settings-button:hover svg {
-  transform: rotate(90deg);
+.settings-button:hover::before {
+  width: 100px;
+  height: 100px;
 }
 
-.settings-button svg {
-  transition: transform 0.3s ease;
+.settings-icon {
+  transition: transform var(--animation-slow) var(--easing-spring);
+  z-index: 1;
+}
+
+.settings-button:hover .settings-icon {
+  transform: rotate(180deg);
 }
 
 .sign-in-button {
-  padding: 0.625rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
   background: var(--primary);
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   color: white;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.3);
+  transition: all var(--animation-normal) var(--easing-default);
+  position: relative;
+  overflow: hidden;
+}
+
+.sign-in-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left var(--animation-slow) var(--easing-default);
 }
 
 .sign-in-button:hover {
   background: var(--primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(0, 102, 255, 0.4);
+  transform: translateX(2px);
+}
+
+.sign-in-button:hover::before {
+  left: 100%;
+}
+
+.sign-in-button:hover .sign-in-icon {
+  transform: translateX(2px);
 }
 
 .sign-in-button:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.3);
+  transform: translateX(0);
+}
+
+.sign-in-icon {
+  transition: transform var(--animation-normal) var(--easing-spring);
+}
+
+/* Clerk User Button styling override */
+.cl-userButton-root {
+  transition: all var(--animation-normal) var(--easing-default);
+}
+
+.cl-userButton-root:hover {
+  transform: scale(1.05);
 }
 
 /* Responsive */
@@ -197,37 +274,84 @@
   }
 
   .brand-logo {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
   }
 
   .nav-section {
-    gap: 0.125rem;
+    gap: 0.25rem;
     margin: 0 1rem;
+    padding: 0.125rem;
   }
 
   .nav-item {
-    padding: 0.5rem 0.875rem;
+    padding: 0.375rem 0.75rem;
     font-size: 0.8125rem;
+    min-width: auto;
   }
 
-  .nav-icon {
-    font-size: 1rem;
+  .nav-label {
+    display: none;
   }
 
   .settings-button {
     width: 36px;
     height: 36px;
   }
+  
+  .sign-in-button {
+    padding: 0.375rem 1rem;
+  }
 }
 
 /* Ultra small screens */
 @media (max-width: 480px) {
   .nav-item {
-    padding: 0.5rem;
+    padding: 0.375rem 0.5rem;
   }
   
   .nav-section {
-    gap: 0;
+    gap: 0.125rem;
+    background: transparent;
+    border: none;
+  }
+  
+  .user-section {
+    gap: 0.5rem;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .action-bar {
+    border-bottom: 2px solid var(--border-primary);
+  }
+  
+  .nav-item.active {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .action-bar,
+  .nav-item,
+  .settings-button,
+  .sign-in-button,
+  .brand-logo {
+    transition: none;
+  }
+  
+  .settings-icon,
+  .sign-in-icon {
+    transition: none;
+  }
+  
+  @keyframes indicatorFadeIn {
+    from, to {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
   }
 }

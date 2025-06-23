@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
-import { Food, MealType } from '../utils/types';
+import { Food, MealType, UserNutritionProfile } from '../utils/types';
 import Actionbar from '../components/Actionbar';
 import BarcodeScanner from '../components/BarcodeScanner';
-import { searchFoods as searchDBFoods, createFood, getQuickAddFoods, createMeal as addMeal } from '../utils/database';
+import { searchFoods as searchDBFoods, createFood, getQuickAddFoods, createMeal as addMeal, getUserProfile } from '../utils/database';
 import { searchFoods, searchFoodByBarcode } from '../utils/foodSearchAPI';
 import { format } from 'date-fns';
+import { getDefaultPortions } from '../utils/unitConversions';
 
 const AddFoodPage: React.FC = () => {
   const navigate = useNavigate();
@@ -22,6 +23,9 @@ const AddFoodPage: React.FC = () => {
   const [isCreatingFood, setIsCreatingFood] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserNutritionProfile | null>(null);
+  
+  const foodUnit = userProfile?.food_weight_unit || 'metric';  // Default to metric for food
 
   // New food form state
   const [newFood, setNewFood] = useState<Partial<Food>>({
@@ -37,7 +41,20 @@ const AddFoodPage: React.FC = () => {
 
   useEffect(() => {
     fetchRecentFoods();
+    fetchUserProfile();
   }, [user]);
+  
+  const fetchUserProfile = async () => {
+    if (!user) return;
+    const profile = await getUserProfile(user.id);
+    if (profile) {
+      setUserProfile(profile);
+      // Set default amount based on unit preference
+      if (profile.food_weight_unit === 'imperial') {
+        setAmount('3.5'); // 3.5 oz is roughly 100g
+      }
+    }
+  };
 
   const fetchRecentFoods = async () => {
     if (!user) return;
@@ -85,25 +102,37 @@ const AddFoodPage: React.FC = () => {
     }
   };
 
-  const calculateNutrition = (food: Food, grams: number) => {
-    const multiplier = grams / 100;
-    return {
-      calories: Math.round(food.calories_per_100g * multiplier),
-      protein: Math.round(food.protein_per_100g * multiplier * 10) / 10,
-      carbs: Math.round(food.carbs_per_100g * multiplier * 10) / 10,
-      fat: Math.round(food.fat_per_100g * multiplier * 10) / 10,
-      fiber: Math.round((food.fiber_per_100g || 0) * multiplier * 10) / 10
-    };
-  };
 
   const handleAddFood = async () => {
     if (!selectedFood || !user) return;
     
     try {
+      let foodId = selectedFood.id;
+      
+      // If the food doesn't have an ID, it's from the API and needs to be created first
+      if (!foodId) {
+        const newFood = await createFood({
+          ...selectedFood,
+          user_id: user.id
+        });
+        
+        if (!newFood || !newFood.id) {
+          alert('Failed to create food entry. Please try again.');
+          return;
+        }
+        
+        foodId = newFood.id;
+      }
+      
+      // Convert amount to grams if using imperial
+      const amountInGrams = foodUnit === 'imperial' 
+        ? parseFloat(amount) * 28.3495 
+        : parseFloat(amount);
+      
       const meal = {
         clerk_user_id: user.id,
-        food_id: selectedFood.id!,
-        amount_grams: parseFloat(amount),
+        food_id: foodId,
+        amount_grams: amountInGrams,
         meal_type: mealType,
         logged_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss")
       };
@@ -126,9 +155,8 @@ const AddFoodPage: React.FC = () => {
     try {
       const foodToCreate = {
         ...newFood,
-        clerk_user_id: user.id,
-        is_verified: false
-      } as Omit<Food, 'id' | 'created_at'>;
+        clerk_user_id: user.id
+      } as Omit<Food, 'id' | 'created_at' | 'is_verified'>;
       
       const createdFood = await createFood(foodToCreate);
       if (createdFood) {
@@ -142,6 +170,23 @@ const AddFoodPage: React.FC = () => {
       console.error('Error creating food:', error);
       alert('Failed to create food. Please try again.');
     }
+  };
+
+  const calculateNutrition = (food: Food, amountValue: number) => {
+    // Convert amount to grams if using imperial
+    const amountInGrams = foodUnit === 'imperial' 
+      ? amountValue * 28.3495 // oz to grams
+      : amountValue;
+    
+    const multiplier = amountInGrams / 100;
+    
+    return {
+      calories: Math.round(food.calories_per_100g * multiplier),
+      protein: Math.round(food.protein_per_100g * multiplier * 10) / 10,
+      carbs: Math.round(food.carbs_per_100g * multiplier * 10) / 10,
+      fat: Math.round(food.fat_per_100g * multiplier * 10) / 10,
+      fiber: Math.round((food.fiber_per_100g || 0) * multiplier * 10) / 10
+    };
   };
 
   const handleBarcodeScanner = () => {
@@ -348,14 +393,28 @@ const AddFoodPage: React.FC = () => {
         {selectedFood && (
           <div className="bg-gray-900 rounded-lg shadow-md p-4 mb-4">
             <h3 className="font-semibold mb-2">{selectedFood.name}</h3>
-            <div className="flex gap-4 mb-3">
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-24 p-2 border rounded-lg"
-              />
-              <span className="py-2">grams</span>
+            <div className="mb-3">
+              <div className="flex gap-4 mb-2">
+                <input
+                  type="text"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-32 p-2 border rounded-lg"
+                  placeholder={foodUnit === 'imperial' ? '3.5' : '100'}
+                />
+                <span className="py-2">{foodUnit === 'imperial' ? 'oz' : 'grams'}</span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {getDefaultPortions(foodUnit).slice(0, 4).map((portion) => (
+                  <button
+                    key={portion.label}
+                    onClick={() => setAmount((portion.value / (foodUnit === 'imperial' ? 28.35 : 1)).toFixed(1))}
+                    className="text-xs px-3 py-1 bg-gray-700 rounded-lg hover:bg-gray-600"
+                  >
+                    {portion.label}
+                  </button>
+                ))}
+              </div>
             </div>
             
             <div className="grid grid-cols-4 gap-2 text-sm">
@@ -397,9 +456,9 @@ const AddFoodPage: React.FC = () => {
         {searchResults.length > 0 && (
           <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-4">
             <h3 className="font-semibold mb-3">Search Results</h3>
-            {searchResults.map(food => (
+            {searchResults.map((food, index) => (
               <button
-                key={food.id}
+                key={food.id || `search-result-${index}`}
                 onClick={() => setSelectedFood(food)}
                 className="w-full text-left p-3 hover:bg-gray-900 border-b last:border-b-0"
               >

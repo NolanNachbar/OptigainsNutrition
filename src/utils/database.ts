@@ -14,6 +14,7 @@ export const getUserProfile = (userId: string) => db.getUserProfile(userId);
 export const createOrUpdateUserProfile = (profile: any) => db.createOrUpdateUserProfile(profile);
 export const getNutritionLog = (userId: string, date: string) => db.getNutritionLog(userId, date);
 export const createOrUpdateNutritionLog = (log: any) => db.createOrUpdateNutritionLog(log);
+export const getNutritionLogs = (userId: string, days: number) => db.getNutritionLogs(userId, days);
 export const getMealsByDate = (userId: string, date: string) => db.getMealsByDate(userId, date);
 export const createMeal = (meal: any) => db.createMeal(meal);
 export const deleteMeal = (mealId: string) => db.deleteMeal(mealId);
@@ -32,6 +33,7 @@ export const createWeightEntry = (entry: any) => db.createWeightEntry(entry);
 export const addWeightEntry = (entry: any) => createWeightEntry(entry);
 export const getWeeklyCheckIns = (userId: string, limit?: number) => db.getWeeklyCheckIns(userId, limit);
 export const createWeeklyCheckIn = (checkIn: any) => db.createWeeklyCheckIn(checkIn);
+export const getLatestWeeklyCheckIn = (userId: string) => db.getLatestWeeklyCheckIn(userId);
 export const getQuickAddFoods = (userId: string, limit?: number) => db.getQuickAddFoods(userId, limit);
 export const updateQuickAddFrequency = (userId: string, foodId: string) => db.updateQuickAddFrequency(userId, foodId);
 

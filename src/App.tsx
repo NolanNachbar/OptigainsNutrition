@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ClerkProvider, useAuth } from "@clerk/clerk-react";
 import { SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
 
@@ -12,11 +12,14 @@ import ProgressPage from "./pages/ProgressPage";
 import CoachingPage from "./pages/CoachingPage";
 import FoodDatabasePage from "./pages/FoodDatabasePage";
 import SettingsPage from "./pages/SettingsPage";
+import OnboardingPage from "./pages/OnboardingPage";
+import WeeklyCheckInPage from "./pages/WeeklyCheckInPage";
 
 // Utils and Components
 import { initializeDatabase } from "./utils/database";
 import Footer from "./components/Footer";
 import { DateProvider } from "./contexts/DateContext";
+import { ProfileGuard } from "./components/ProfileGuard";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -54,7 +57,37 @@ const App: React.FC = () => {
                   element={
                     <>
                       <SignedIn>
-                        <DashboardPage />
+                        <Navigate to="/dashboard" />
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <DashboardPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/onboarding"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={false}>
+                          <OnboardingPage />
+                        </ProfileGuard>
                       </SignedIn>
                       <SignedOut>
                         <RedirectToSignIn />
@@ -67,7 +100,9 @@ const App: React.FC = () => {
                   element={
                     <>
                       <SignedIn>
-                        <FoodDiaryPage />
+                        <ProfileGuard requireComplete={true}>
+                          <FoodDiaryPage />
+                        </ProfileGuard>
                       </SignedIn>
                       <SignedOut>
                         <RedirectToSignIn />
@@ -80,7 +115,9 @@ const App: React.FC = () => {
                   element={
                     <>
                       <SignedIn>
-                        <AddFoodPage />
+                        <ProfileGuard requireComplete={true}>
+                          <AddFoodPage />
+                        </ProfileGuard>
                       </SignedIn>
                       <SignedOut>
                         <RedirectToSignIn />
@@ -93,7 +130,9 @@ const App: React.FC = () => {
                   element={
                     <>
                       <SignedIn>
-                        <ProgressPage />
+                        <ProfileGuard requireComplete={true}>
+                          <ProgressPage />
+                        </ProfileGuard>
                       </SignedIn>
                       <SignedOut>
                         <RedirectToSignIn />
@@ -106,7 +145,9 @@ const App: React.FC = () => {
                   element={
                     <>
                       <SignedIn>
-                        <CoachingPage />
+                        <ProfileGuard requireComplete={true}>
+                          <CoachingPage />
+                        </ProfileGuard>
                       </SignedIn>
                       <SignedOut>
                         <RedirectToSignIn />
@@ -119,7 +160,9 @@ const App: React.FC = () => {
                   element={
                     <>
                       <SignedIn>
-                        <FoodDatabasePage />
+                        <ProfileGuard requireComplete={true}>
+                          <FoodDatabasePage />
+                        </ProfileGuard>
                       </SignedIn>
                       <SignedOut>
                         <RedirectToSignIn />
@@ -132,7 +175,24 @@ const App: React.FC = () => {
                   element={
                     <>
                       <SignedIn>
-                        <SettingsPage />
+                        <ProfileGuard requireComplete={true}>
+                          <SettingsPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/weekly-check-in"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <WeeklyCheckInPage />
+                        </ProfileGuard>
                       </SignedIn>
                       <SignedOut>
                         <RedirectToSignIn />

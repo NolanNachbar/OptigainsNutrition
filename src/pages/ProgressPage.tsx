@@ -16,6 +16,10 @@ import { WeightEntry, NutritionLog, Macros } from '../utils/types';
 import Actionbar from '../components/Actionbar';
 import { getWeightRange, getNutritionLogRange, addWeightEntry } from '../utils/database';
 import { calculateAdaptiveTDEE } from '../utils/tdeeCalculator';
+import { Card, MetricCard, CardGroup } from '../components/ui/Card';
+import { Button, ButtonGroup } from '../components/ui/Button';
+import { ProgressRing, MultiProgressRing } from '../components/ui/ProgressRing';
+import { theme } from '../styles/theme';
 
 ChartJS.register(
   CategoryScale,
@@ -144,9 +148,15 @@ const ProgressPage: React.FC = () => {
         {
           label: 'Weight (kg)',
           data: weightEntries.map(entry => entry.weight),
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          tension: 0.3
+          borderColor: theme.colors.blue[500],
+          backgroundColor: `${theme.colors.blue[500]}20`,
+          borderWidth: 3,
+          pointBackgroundColor: theme.colors.blue[500],
+          pointBorderColor: theme.colors.gray[900],
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          tension: 0.4
         }
       ]
     };
@@ -159,9 +169,15 @@ const ProgressPage: React.FC = () => {
         {
           label: 'Daily Calories',
           data: nutritionLogs.map(log => log.calories),
-          borderColor: 'rgb(34, 197, 94)',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          tension: 0.3
+          borderColor: theme.colors.green[500],
+          backgroundColor: `${theme.colors.green[500]}20`,
+          borderWidth: 3,
+          pointBackgroundColor: theme.colors.green[500],
+          pointBorderColor: theme.colors.gray[900],
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          tension: 0.4
         }
       ]
     };
@@ -191,73 +207,71 @@ const ProgressPage: React.FC = () => {
       
       <div className="w-full pt-24 pb-20">
         <div className="max-w-4xl mx-auto px-4">
-          <h1 className="text-2xl font-bold mb-6">Progress</h1>
+          <h1 className="text-3xl font-bold mb-2 tracking-tight">Progress</h1>
+          <p className="text-gray-400 mb-8">Track your journey towards your goals</p>
+          
           <div className="max-w-2xl mx-auto">
             {/* Time Range Selector */}
-            <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-6">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setTimeRange('week')}
-              className={`flex-1 py-2 px-4 rounded-lg ${
-                timeRange === 'week' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-750 hover:bg-gray-700'
-              }`}
-            >
-              Week
-            </button>
-            <button
-              onClick={() => setTimeRange('month')}
-              className={`flex-1 py-2 px-4 rounded-lg ${
-                timeRange === 'month' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-750 hover:bg-gray-700'
-              }`}
-            >
-              Month
-            </button>
-            <button
-              onClick={() => setTimeRange('3months')}
-              className={`flex-1 py-2 px-4 rounded-lg ${
-                timeRange === '3months' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-750 hover:bg-gray-700'
-              }`}
-            >
-              3 Months
-            </button>
-          </div>
-        </div>
+            <Card className="mb-6">
+              <ButtonGroup className="w-full">
+                <Button
+                  variant={timeRange === 'week' ? 'primary' : 'secondary'}
+                  onClick={() => setTimeRange('week')}
+                  className="flex-1"
+                >
+                  Week
+                </Button>
+                <Button
+                  variant={timeRange === 'month' ? 'primary' : 'secondary'}
+                  onClick={() => setTimeRange('month')}
+                  className="flex-1"
+                >
+                  Month
+                </Button>
+                <Button
+                  variant={timeRange === '3months' ? 'primary' : 'secondary'}
+                  onClick={() => setTimeRange('3months')}
+                  className="flex-1"
+                >
+                  3 Months
+                </Button>
+              </ButtonGroup>
+            </Card>
 
         {/* Weight Summary */}
-        <div className="bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Weight</h2>
-            <button
+        <Card variant="elevated" className="mb-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold">Weight Tracking</h2>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setShowWeightModal(true)}
-              className="text-blue-600 hover:text-blue-800"
+              icon={
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              }
             >
-              + Add
-            </button>
+              Add Entry
+            </Button>
           </div>
           
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <div className="text-2xl font-bold">{latestWeight.toFixed(1)} kg</div>
-              <div className="text-sm text-gray-400">Current</div>
-            </div>
-            <div>
-              <div className={`text-2xl font-bold ${
-                weeklyChange > 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {weeklyChange > 0 ? '+' : ''}{weeklyChange.toFixed(1)} kg
-              </div>
-              <div className="text-sm text-gray-400">This Week</div>
-            </div>
-          </div>
+          <CardGroup>
+            <MetricCard
+              title="Current Weight"
+              value={`${latestWeight.toFixed(1)} kg`}
+              subtitle="Latest measurement"
+            />
+            <MetricCard
+              title="Weekly Change"
+              value={`${weeklyChange > 0 ? '+' : ''}${weeklyChange.toFixed(1)} kg`}
+              subtitle="7-day average"
+              trend={weeklyChange !== 0 ? { value: Math.abs(weeklyChange), isPositive: weeklyChange > 0 } : undefined}
+            />
+          </CardGroup>
           
           {weightEntries.length > 1 && (
-            <div className="h-48">
+            <div className="h-64 mt-6">
               <Line 
                 data={getWeightChartData()} 
                 options={{
@@ -266,77 +280,129 @@ const ProgressPage: React.FC = () => {
                   plugins: {
                     legend: {
                       display: false
+                    },
+                    tooltip: {
+                      backgroundColor: theme.colors.gray[800],
+                      titleColor: theme.colors.gray[100],
+                      bodyColor: theme.colors.gray[300],
+                      borderColor: theme.colors.gray[700],
+                      borderWidth: 1,
+                      padding: 12,
+                      cornerRadius: 8,
+                      displayColors: false
                     }
                   },
                   scales: {
+                    x: {
+                      grid: {
+                        display: false
+                      },
+                      ticks: {
+                        color: theme.colors.gray[400]
+                      }
+                    },
                     y: {
-                      beginAtZero: false
+                      beginAtZero: false,
+                      grid: {
+                        color: theme.colors.gray[800]
+                      },
+                      ticks: {
+                        color: theme.colors.gray[400]
+                      }
                     }
                   }
                 }}
               />
             </div>
           )}
-        </div>
+        </Card>
 
         {/* TDEE Estimate */}
-        <div className="bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">TDEE Estimate</h2>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-blue-600">{tdee || 'N/A'}</div>
-            <div className="text-gray-400">calories/day</div>
-            {tdeeConfidence > 0 && (
-              <div className="mt-2">
-                <div className="text-sm text-gray-500">Confidence: {tdeeConfidence}%</div>
-                <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full"
-                    style={{ width: `${tdeeConfidence}%` }}
-                  />
-                </div>
+        <Card variant="glass" className="mb-6">
+          <h2 className="text-xl font-semibold mb-6">Adaptive TDEE</h2>
+          <div className="flex flex-col items-center">
+            <div className="mb-4">
+              <ProgressRing
+                value={tdeeConfidence}
+                size={120}
+                strokeWidth={10}
+                color={theme.colors.blue[500]}
+                backgroundColor={theme.colors.gray[800]}
+              />
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-bold mb-1">
+                {tdee ? tdee.toLocaleString() : '—'}
               </div>
-            )}
-            <p className="text-sm text-gray-500 mt-2">
-              {tdeeConfidence < 50 
-                ? 'Need more data for accurate calculation'
-                : 'Based on your intake and weight changes'
-              }
-            </p>
+              <div className="text-gray-400 text-sm mb-4">calories per day</div>
+              <p className="text-sm text-gray-500 max-w-xs">
+                {tdeeConfidence < 50 
+                  ? 'Keep tracking for 2+ weeks to improve accuracy'
+                  : `${tdeeConfidence}% confidence based on ${nutritionLogs.length} days of data`
+                }
+              </p>
+            </div>
           </div>
-        </div>
+        </Card>
 
         {/* Average Macros */}
-        <div className="bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Average Daily Intake</h2>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span>Calories</span>
-              <span className="font-semibold">{avgMacros.calories}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Protein</span>
-              <span className="font-semibold">{avgMacros.protein}g</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Carbs</span>
-              <span className="font-semibold">{avgMacros.carbs}g</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Fat</span>
-              <span className="font-semibold">{avgMacros.fat}g</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Fiber</span>
-              <span className="font-semibold">{avgMacros.fiber}g</span>
-            </div>
+        <Card variant="elevated" className="mb-6">
+          <h2 className="text-xl font-semibold mb-6">Average Daily Intake</h2>
+          
+          {/* Macro Distribution Ring */}
+          <div className="flex justify-center mb-6">
+            <MultiProgressRing
+              size={140}
+              strokeWidth={16}
+              values={[
+                {
+                  value: (avgMacros.protein * 4 / avgMacros.calories) * 100 || 0,
+                  color: theme.colors.blue[500],
+                  label: 'Protein'
+                },
+                {
+                  value: (avgMacros.carbs * 4 / avgMacros.calories) * 100 || 0,
+                  color: theme.colors.green[500],
+                  label: 'Carbs'
+                },
+                {
+                  value: (avgMacros.fat * 9 / avgMacros.calories) * 100 || 0,
+                  color: theme.colors.orange[500],
+                  label: 'Fat'
+                }
+              ]}
+            />
           </div>
-        </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <MetricCard
+              title="Calories"
+              value={avgMacros.calories.toLocaleString()}
+              subtitle="Daily average"
+            />
+            <MetricCard
+              title="Protein"
+              value={`${avgMacros.protein}g`}
+              subtitle={`${Math.round((avgMacros.protein * 4 / avgMacros.calories) * 100) || 0}% of calories`}
+            />
+            <MetricCard
+              title="Carbs"
+              value={`${avgMacros.carbs}g`}
+              subtitle={`${Math.round((avgMacros.carbs * 4 / avgMacros.calories) * 100) || 0}% of calories`}
+            />
+            <MetricCard
+              title="Fat"
+              value={`${avgMacros.fat}g`}
+              subtitle={`${Math.round((avgMacros.fat * 9 / avgMacros.calories) * 100) || 0}% of calories`}
+            />
+          </div>
+        </Card>
 
         {/* Calorie Trend */}
-        <div className="bg-gray-800 rounded-lg shadow-md p-6">
-          <h2 className="text-lg font-semibold mb-4">Calorie Trend</h2>
-          {nutritionLogs.length > 1 && (
-            <div className="h-48">
+        <Card variant="elevated">
+          <h2 className="text-xl font-semibold mb-6">Calorie Trend</h2>
+          {nutritionLogs.length > 1 ? (
+            <div className="h-64">
               <Line 
                 data={getCalorieChartData()} 
                 options={{
@@ -345,49 +411,87 @@ const ProgressPage: React.FC = () => {
                   plugins: {
                     legend: {
                       display: false
+                    },
+                    tooltip: {
+                      backgroundColor: theme.colors.gray[800],
+                      titleColor: theme.colors.gray[100],
+                      bodyColor: theme.colors.gray[300],
+                      borderColor: theme.colors.gray[700],
+                      borderWidth: 1,
+                      padding: 12,
+                      cornerRadius: 8,
+                      displayColors: false
+                    }
+                  },
+                  scales: {
+                    x: {
+                      grid: {
+                        display: false
+                      },
+                      ticks: {
+                        color: theme.colors.gray[400]
+                      }
+                    },
+                    y: {
+                      grid: {
+                        color: theme.colors.gray[800]
+                      },
+                      ticks: {
+                        color: theme.colors.gray[400]
+                      }
                     }
                   }
                 }}
               />
             </div>
-          )}
+          ) : (
+            <div className="flex flex-col items-center justify-center h-48 text-gray-500">
+              <svg className="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <p className="text-sm">Track more days to see trends</p>
             </div>
+          )}
+            </Card>
           </div>
         </div>
       </div>
 
       {/* Weight Entry Modal */}
       {showWeightModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold mb-4">Log Weight</h3>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card variant="elevated" className="max-w-sm w-full animate-scale-in">
+            <h3 className="text-xl font-semibold mb-6">Log Weight</h3>
             <input
               type="number"
               step="0.1"
               value={newWeight}
               onChange={(e) => setNewWeight(e.target.value)}
-              placeholder="Weight in kg"
-              className="w-full p-2 border rounded-lg mb-4"
+              placeholder="Enter weight"
+              className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl mb-6 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
               autoFocus
             />
-            <div className="flex gap-2">
-              <button
+            <ButtonGroup className="w-full">
+              <Button
                 onClick={handleAddWeight}
-                className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
+                variant="primary"
+                className="flex-1"
+                disabled={!newWeight}
               >
-                Save
-              </button>
-              <button
+                Save Entry
+              </Button>
+              <Button
                 onClick={() => {
                   setShowWeightModal(false);
                   setNewWeight('');
                 }}
-                className="flex-1 bg-gray-700 py-2 rounded-lg hover:bg-gray-600"
+                variant="secondary"
+                className="flex-1"
               >
                 Cancel
-              </button>
-            </div>
-          </div>
+              </Button>
+            </ButtonGroup>
+          </Card>
         </div>
       )}
     </div>

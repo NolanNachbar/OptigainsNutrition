@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { format, addDays, subDays } from 'date-fns';
-import { Meal, NutritionLog, MealType } from '../utils/types';
+import { Meal, NutritionLog, MealType, UserNutritionProfile } from '../utils/types';
 import Actionbar from '../components/Actionbar';
-import { getMealsByDate, deleteMeal, getNutritionLog } from '../utils/database';
+import { getMealsByDate, deleteMeal, getNutritionLog, getUserProfile } from '../utils/database';
 import { copyMealsFromDate } from '../utils/nutritionDatabase';
+import { formatWeight } from '../utils/unitConversions';
 
 interface MealGroup {
   type: MealType;
@@ -23,10 +24,22 @@ const FoodDiaryPage: React.FC = () => {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [nutritionLog, setNutritionLog] = useState<NutritionLog | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState<UserNutritionProfile | null>(null);
+  
+  const foodUnit = userProfile?.food_weight_unit || 'metric';
 
   useEffect(() => {
     fetchMeals();
+    fetchUserProfile();
   }, [user, selectedDate]);
+  
+  const fetchUserProfile = async () => {
+    if (!user) return;
+    const profile = await getUserProfile(user.id);
+    if (profile) {
+      setUserProfile(profile);
+    }
+  };
 
   const fetchMeals = async () => {
     if (!user) return;
@@ -272,7 +285,7 @@ const FoodDiaryPage: React.FC = () => {
                       <div className="flex-1">
                         <div className="font-medium">{meal.food?.name}</div>
                         <div className="text-sm text-gray-400">
-                          {meal.amount_grams}g • {Math.round((meal.food?.calories_per_100g || 0) * meal.amount_grams / 100)} cal
+                          {formatWeight(meal.amount_grams, foodUnit)} • {Math.round((meal.food?.calories_per_100g || 0) * meal.amount_grams / 100)} cal
                         </div>
                       </div>
                       <button

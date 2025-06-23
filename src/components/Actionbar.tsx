@@ -26,7 +26,14 @@ const ActionBar: React.FC = () => {
       <div className="action-bar-container">
         {/* Logo and Brand */}
         <div className="brand-section" onClick={() => navigate("/")}>
-          <h1 className="brand-name">OptiGains Nutrition</h1>
+          <div className="brand-logo-wrapper">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="brand-logo">
+              <circle cx="16" cy="16" r="15" stroke="currentColor" strokeWidth="2"/>
+              <path d="M16 8C16 8 20 12 20 16C20 20 16 24 16 24C16 24 12 20 12 16C12 12 16 8 16 8Z" fill="currentColor" fillOpacity="0.3"/>
+              <circle cx="16" cy="16" r="4" fill="currentColor"/>
+            </svg>
+          </div>
+          <h1 className="brand-name">OptiGains</h1>
         </div>
 
         {/* Navigation */}
@@ -36,8 +43,13 @@ const ActionBar: React.FC = () => {
               key={item.path}
               onClick={() => navigate(item.path)}
               className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+              aria-label={item.label}
+              aria-current={location.pathname === item.path ? 'page' : undefined}
             >
               <span className="nav-label">{item.label}</span>
+              {location.pathname === item.path && (
+                <span className="nav-indicator" aria-hidden="true" />
+              )}
             </button>
           ))}
         </nav>
@@ -49,9 +61,18 @@ const ActionBar: React.FC = () => {
             className="settings-button"
             title="Settings"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <svg className="settings-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path 
+                d="M10 12.5C11.3807 12.5 12.5 11.3807 12.5 10C12.5 8.61929 11.3807 7.5 10 7.5C8.61929 7.5 7.5 8.61929 7.5 10C7.5 11.3807 8.61929 12.5 10 12.5Z" 
+                stroke="currentColor" 
+                strokeWidth="1.5"
+              />
+              <path 
+                d="M10 3.5V1M10 19V16.5M16.5 10H19M1 10H3.5M14.5 5.5L16.5 3.5M3.5 16.5L5.5 14.5M14.5 14.5L16.5 16.5M3.5 3.5L5.5 5.5" 
+                stroke="currentColor" 
+                strokeWidth="1.5" 
+                strokeLinecap="round"
+              />
             </svg>
           </button>
           
@@ -61,8 +82,11 @@ const ActionBar: React.FC = () => {
 
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="sign-in-button">
-                Sign In
+              <button className="sign-in-button" aria-label="Sign in">
+                <span>Sign In</span>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="sign-in-icon">
+                  <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </button>
             </SignInButton>
           </SignedOut>

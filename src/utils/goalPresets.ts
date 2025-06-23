@@ -198,13 +198,13 @@ const estimateWeightFromTDEE = (profile: UserNutritionProfile): number => {
   // based on TDEE and activity level
   const activityMultipliers = {
     sedentary: 1.2,
-    light: 1.375,
+    lightly_active: 1.375,
     moderate: 1.55,
-    active: 1.725,
-    very_active: 1.9
+    very_active: 1.725,
+    extra_active: 1.9
   };
   
-  const multiplier = activityMultipliers[profile.activity_level];
+  const multiplier = activityMultipliers[profile.activity_level] || 1.55;
   const estimatedBMR = profile.tdee_estimate / multiplier;
   
   // Rough estimate: average BMR of 1500 corresponds to ~70kg

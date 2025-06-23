@@ -179,6 +179,28 @@ export class SupabaseDB {
     return true;
   }
 
+  async getNutritionLogs(userId: string, days: number): Promise<NutritionLog[]> {
+    const client = await this.getAuthClient();
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { data, error } = await client
+      .from('nutrition_logs')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .gte('date', startDate.toISOString().split('T')[0])
+      .lte('date', endDate.toISOString().split('T')[0])
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching nutrition logs:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
   // ========== Meal Operations ==========
 
   async getMealsByDate(userId: string, date: string): Promise<Meal[]> {
@@ -282,6 +304,12 @@ export class SupabaseDB {
       foodData.user_id = foodData.clerk_user_id;
       delete foodData.clerk_user_id;
     }
+    
+    // Remove fields that might not exist in the database
+    if ('is_verified' in foodData) delete foodData.is_verified;
+    if ('verified' in foodData) delete foodData.verified;
+    if ('created_at' in foodData) delete foodData.created_at; // This is auto-generated
+    if ('id' in foodData) delete foodData.id; // This is auto-generated
     
     const { data, error } = await client
       .from('foods')
@@ -387,6 +415,23 @@ export class SupabaseDB {
     }
 
     return true;
+  }
+
+  async getLatestWeeklyCheckIn(userId: string): Promise<WeeklyCheckIn | null> {
+    const client = await this.getAuthClient();
+    const { data, error } = await client
+      .from('weekly_check_ins')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .order('week_start_date', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error('Error fetching latest weekly check-in:', error);
+      return null;
+    }
+
+    return data && data.length > 0 ? data[0] : null;
   }
 
   // ========== Food Management Operations ==========

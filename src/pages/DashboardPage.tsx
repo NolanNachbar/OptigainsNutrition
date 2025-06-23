@@ -2,9 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { format } from 'date-fns';
-import { Macros, NutritionLog, UserNutritionProfile } from '../utils/types';
+import { NutritionLog, UserNutritionProfile, Meal, MealType } from '../utils/types';
 import Actionbar from '../components/Actionbar';
 import { getUserProfile, createOrUpdateUserProfile, getNutritionLog, getMealsByDate, getWeightEntries } from '../utils/database';
+import { Card, MetricCard, CardGroup } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { MultiProgressRing, MiniProgressRing } from '../components/ui/ProgressRing';
+import { theme } from '../styles/theme';
+import TDEECard from '../components/TDEECard';
+import CoachingRecommendations from '../components/CoachingRecommendations';
 
 // Simple TDEE types for now
 interface SimpleTDEEData {
@@ -26,8 +32,6 @@ interface SimpleRecommendation {
     fat?: number;
   };
 }
-import TDEECard from '../components/TDEECard';
-import CoachingRecommendations from '../components/CoachingRecommendations';
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -37,22 +41,29 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [tdeeData, setTdeeData] = useState<SimpleTDEEData | null>(null);
   const [recommendations, setRecommendations] = useState<SimpleRecommendation[]>([]);
+  const [meals, setMeals] = useState<Meal[]>([]);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const today = format(new Date(), 'yyyy-MM-dd');
 
   useEffect(() => {
     const initAndFetch = async () => {
-      if (isLoaded && user) {
-        try {
-          // Small delay to ensure auth is propagated
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          await fetchData();
-          await fetchTDEEData();
-        } catch (error) {
-          console.error('[DashboardPage] Error during init:', error);
-          setLoading(false);
-        }
+      if (!isLoaded) return;
+      
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        // Small delay to ensure auth is propagated
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        await fetchData();
+        await fetchTDEEData();
+      } catch (error) {
+        console.error('[DashboardPage] Error during init:', error);
+        setLoading(false);
       }
     };
     
@@ -63,323 +74,381 @@ const DashboardPage: React.FC = () => {
     if (!user || !profile) return;
 
     try {
-      // Get recent weight entries for basic TDEE display
-      const weightEntries = await getWeightEntries(user.id, 30); // last 30 days
+      // Get weight entries for trend calculation
+      const weights = await getWeightEntries(user.id, 30);
       
-      // Simple TDEE data for display
-      const simpleTDEE: SimpleTDEEData = {
-        currentTDEE: profile.tdee_estimate,
-        weeklyChange: 0, // TODO: calculate from weight entries
-        confidence: weightEntries.length >= 14 ? 'medium' : 'low',
-        trendDirection: 'maintaining',
-        adherenceScore: 85 // TODO: calculate from nutrition logs
-      };
-      
-      setTdeeData(simpleTDEE);
+      // Calculate simple weight trend
+      let weeklyChange = 0;
+      if (weights.length >= 2) {
+        const latestWeight = weights[0].weight;
+        const weekAgoWeight = weights.find(w => {
+          const daysDiff = Math.floor((new Date().getTime() - new Date(w.date).getTime()) / (1000 * 60 * 60 * 24));
+          return daysDiff >= 6 && daysDiff <= 8;
+        })?.weight || latestWeight;
+        
+        weeklyChange = latestWeight - weekAgoWeight;
+      }
 
-      // Simple recommendations
-      const simpleRecs: SimpleRecommendation[] = [
-        {
-          type: 'info',
-          message: 'Track consistently for personalized recommendations',
-          severity: 'info'
-        }
-      ];
-      setRecommendations(simpleRecs);
+      // Determine trend direction
+      let trendDirection: 'gaining' | 'losing' | 'maintaining' = 'maintaining';
+      if (weeklyChange > 0.2) trendDirection = 'gaining';
+      else if (weeklyChange < -0.2) trendDirection = 'losing';
+
+      // Simple adherence calculation
+      const adherenceScore = todayLog ? Math.min(100, Math.round((todayLog.calories / profile.target_macros.calories) * 100)) : 0;
+
+      setTdeeData({
+        currentTDEE: profile.tdee_estimate,
+        weeklyChange,
+        confidence: weights.length >= 14 ? 'high' : weights.length >= 7 ? 'medium' : 'low',
+        trendDirection,
+        adherenceScore
+      });
+
+      // Generate simple recommendations
+      const newRecommendations: SimpleRecommendation[] = [];
+      
+      if (profile.goal_type === 'cut' && trendDirection !== 'losing') {
+        newRecommendations.push({
+          type: 'calories',
+          message: 'You may need to reduce calories slightly to continue losing weight.',
+          severity: 'warning',
+          suggestedChanges: { calories: -100 }
+        });
+      } else if (profile.goal_type === 'gain' && trendDirection !== 'gaining') {
+        newRecommendations.push({
+          type: 'calories',
+          message: 'Consider increasing calories to support muscle growth.',
+          severity: 'info',
+          suggestedChanges: { calories: 150 }
+        });
+      }
+
+      setRecommendations(newRecommendations);
     } catch (error) {
-      console.error('[DashboardPage] Error calculating TDEE:', error);
+      console.error('Error fetching TDEE data:', error);
     }
   };
 
   const fetchData = async () => {
     if (!user) return;
     
-    
     try {
-      // Fetch user profile
+      // Fetch user profile - ProfileGuard ensures it exists
       let userProfile = await getUserProfile(user.id);
       
-      // If no profile exists, create default one
-      if (!userProfile) {
-        const defaultProfile: UserNutritionProfile = {
-          clerk_user_id: user.id,
-          tdee_estimate: 2500,
-          coaching_mode: 'coached',
-          goal_type: 'maintenance',
-          target_macros: {
-            calories: 2500,
-            protein: 180,
-            carbs: 280,
-            fat: 80,
-            fiber: 30
-          },
-          activity_level: 'moderate'
-        };
-
-        const success = await createOrUpdateUserProfile(defaultProfile);
-        if (success) {
-          userProfile = await getUserProfile(user.id);
-        }
-      }
-
-      if (userProfile) {
-        setProfile(userProfile);
-      }
-
-      // Fetch today's nutrition log
-      const log = await getNutritionLog(user.id, today);
+      setProfile(userProfile);
       
-      if (log) {
+      // Fetch today's nutrition log
+      if (userProfile) {
+        const log = await getNutritionLog(user.id, today);
         setTodayLog(log);
-      } else {
-        // Calculate from meals if no log exists
-        const meals = await getMealsByDate(user.id, today);
         
-        if (meals && meals.length > 0) {
-          const totals = meals.reduce((acc, meal) => {
-            if (!meal.food) return acc;
-            const multiplier = meal.amount_grams / 100;
-            return {
-              calories: acc.calories + (meal.food.calories_per_100g * multiplier),
-              protein: acc.protein + (meal.food.protein_per_100g * multiplier),
-              carbs: acc.carbs + (meal.food.carbs_per_100g * multiplier),
-              fat: acc.fat + (meal.food.fat_per_100g * multiplier),
-              fiber: (acc.fiber || 0) + ((meal.food.fiber_per_100g || 0) * multiplier)
-            };
-          }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
-
-          setTodayLog({
-            clerk_user_id: user.id,
-            date: today,
-            calories: Math.round(totals.calories),
-            protein: Math.round(totals.protein),
-            carbs: Math.round(totals.carbs),
-            fat: Math.round(totals.fat),
-            fiber: Math.round(totals.fiber || 0)
-          });
-        } else {
-          setTodayLog({
-            clerk_user_id: user.id,
-            date: today,
-            calories: 0,
-            protein: 0,
-            carbs: 0,
-            fat: 0,
-            fiber: 0
-          });
-        }
+        // Fetch today's meals
+        const todayMeals = await getMealsByDate(user.id, today);
+        setMeals(todayMeals);
       }
+      
+      // Only set loading to false if we've successfully loaded everything
+      // Add a minimum delay on first load to prevent flash
+      if (!hasLoadedOnce) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        setHasLoadedOnce(true);
+      }
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching data:', error);
-    } finally {
       setLoading(false);
     }
   };
 
-  const calculatePercentage = (current: number, target: number): number => {
-    return Math.min(Math.round((current / target) * 100), 100);
-  };
-
-  const getRemainingMacros = (): Macros => {
-    if (!profile || !todayLog) {
-      return { calories: 0, protein: 0, carbs: 0, fat: 0 };
-    }
-
-    return {
-      calories: Math.max(0, profile.target_macros.calories - todayLog.calories),
-      protein: Math.max(0, profile.target_macros.protein - todayLog.protein),
-      carbs: Math.max(0, profile.target_macros.carbs - todayLog.carbs),
-      fat: Math.max(0, profile.target_macros.fat - todayLog.fat),
-      fiber: Math.max(0, (profile.target_macros.fiber || 30) - (todayLog.fiber || 0))
+  const handleApplyRecommendation = async (changes: any) => {
+    if (!profile) return;
+    
+    const updatedProfile = {
+      ...profile,
+      target_macros: {
+        ...profile.target_macros,
+        ...changes
+      }
     };
+    
+    const success = await createOrUpdateUserProfile(updatedProfile);
+    if (success) {
+      setProfile(updatedProfile);
+      await fetchData();
+    }
   };
 
-  if (loading) {
+  // Calculate consumed macros from meals
+  const consumedMacros = meals.reduce((totals, meal) => {
+    if (!meal.food) return totals;
+    const multiplier = meal.amount_grams / 100;
+    return {
+      calories: totals.calories + Math.round(meal.food.calories_per_100g * multiplier),
+      protein: totals.protein + Math.round(meal.food.protein_per_100g * multiplier),
+      carbs: totals.carbs + Math.round(meal.food.carbs_per_100g * multiplier),
+      fat: totals.fat + Math.round(meal.food.fat_per_100g * multiplier),
+      fiber: totals.fiber + Math.round((meal.food.fiber_per_100g || 0) * multiplier)
+    };
+  }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+
+  const consumedCalories = consumedMacros.calories;
+  const targetCalories = profile?.target_macros.calories || 0;
+  const remainingCalories = Math.max(0, targetCalories - consumedCalories);
+  const calorieProgress = targetCalories > 0 ? (consumedCalories / targetCalories) * 100 : 0;
+
+  // Group meals by type
+  const mealGroups = meals.reduce((groups, meal) => {
+    const group = groups.find(g => g.type === meal.meal_type);
+    if (group) {
+      group.meals.push(meal);
+    } else {
+      groups.push({ type: meal.meal_type, meals: [meal] });
+    }
+    return groups;
+  }, [] as { type: MealType; meals: Meal[] }[]);
+
+  if (!isLoaded || loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col">
+      <div className="min-h-screen bg-gray-900">
         <Actionbar />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-gray-400">Loading...</div>
+        <div className="pt-24 flex items-center justify-center min-h-screen">
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-2 border-gray-700 border-t-blue-500"></div>
+            <p className="mt-4 text-gray-400">Loading your nutrition data...</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  const remaining = getRemainingMacros();
-
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
+    <div className="min-h-screen bg-gray-900">
       <Actionbar />
       
-      <div className="page-content flex-1">
-        <div className="centered-container">
+      <div className="w-full pt-24 pb-20">
+        <div className="max-w-4xl mx-auto px-4">
           {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">
-              {format(new Date(), 'EEEE, MMM d')}
-            </h1>
-            <p className="text-gray-400">Welcome back, {user?.firstName || 'there'}!</p>
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold tracking-tight">Welcome back{user?.firstName ? `, ${user.firstName}` : ''}!</h1>
+            <p className="text-gray-400 mt-2">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
           </div>
-
-          <div className="w-full max-w-2xl">
-            {/* TDEE and Coaching Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <TDEECard tdeeData={tdeeData} isLoading={loading} />
-              {recommendations.length > 0 && (
-                <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
-                  <CoachingRecommendations 
-                    recommendations={recommendations.slice(0, 2)} 
-                    onApplyChanges={(changes) => {
-                      console.log('Apply coaching changes:', changes);
-                      // TODO: Implement macro adjustment
-                    }}
+          
+          <div className="max-w-2xl mx-auto">
+            {/* Macros Summary */}
+            <Card variant="glass" className="mb-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold">Today's Nutrition</h2>
+                <MiniProgressRing
+                  value={calorieProgress}
+                  size={32}
+                  strokeWidth={4}
+                />
+              </div>
+              
+              {/* Calorie Overview */}
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <div className="text-4xl font-bold">{consumedCalories.toLocaleString()}</div>
+                  <div className="text-sm text-gray-400 mt-1">calories consumed</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-semibold text-blue-500">{remainingCalories.toLocaleString()}</div>
+                  <div className="text-sm text-gray-400 mt-1">remaining</div>
+                </div>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="mb-8">
+                <div className="h-3 bg-gray-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-700 ease-out"
+                    style={{ width: `${Math.min(calorieProgress, 100)}%` }}
+                  />
+                </div>
+              </div>
+              
+              {/* Macro Distribution */}
+              {consumedCalories > 0 && (
+                <div className="flex justify-center mb-8">
+                  <MultiProgressRing
+                    size={160}
+                    strokeWidth={20}
+                    values={[
+                      {
+                        value: (consumedMacros.protein * 4 / consumedCalories) * 100,
+                        color: theme.colors.blue[500],
+                        label: 'Protein'
+                      },
+                      {
+                        value: (consumedMacros.carbs * 4 / consumedCalories) * 100,
+                        color: theme.colors.green[500],
+                        label: 'Carbs'
+                      },
+                      {
+                        value: (consumedMacros.fat * 9 / consumedCalories) * 100,
+                        color: theme.colors.orange[500],
+                        label: 'Fat'
+                      }
+                    ]}
                   />
                 </div>
               )}
-            </div>
-
-            {/* Calorie Overview Card */}
-            <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6 mb-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-white">Calories</h2>
-              <button
-                onClick={() => navigate('/add-food')}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-              >
-                Add Food
-              </button>
-            </div>
-            
-            {/* Calorie Ring */}
-            <div className="flex flex-col items-center mb-6">
-              <div className="relative">
-                <svg className="w-40 h-40 transform -rotate-90">
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r="70"
-                    stroke="#374151"
-                    strokeWidth="12"
-                    fill="none"
-                  />
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r="70"
-                    stroke="#3B82F6"
-                    strokeWidth="12"
-                    fill="none"
-                    strokeDasharray={`${2 * Math.PI * 70}`}
-                    strokeDashoffset={`${2 * Math.PI * 70 * (1 - (todayLog?.calories || 0) / (profile?.target_macros.calories || 1))}`}
-                    className="transition-all duration-500"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <div className="text-3xl font-bold text-white">{todayLog?.calories || 0}</div>
-                  <div className="text-sm text-gray-400">of {profile?.target_macros.calories}</div>
-                </div>
-              </div>
               
-              <div className="text-center mt-4">
-                <p className="text-2xl font-semibold text-white">{remaining.calories}</p>
-                <p className="text-gray-400">calories remaining</p>
-              </div>
-            </div>
-          </div>
+              {/* Macro Details */}
+              <CardGroup>
+                <MetricCard
+                  title="Protein"
+                  value={`${consumedMacros.protein}g`}
+                  subtitle={`of ${profile?.target_macros.protein || 0}g`}
+                />
+                <MetricCard
+                  title="Carbs"
+                  value={`${consumedMacros.carbs}g`}
+                  subtitle={`of ${profile?.target_macros.carbs || 0}g`}
+                />
+                <MetricCard
+                  title="Fat"
+                  value={`${consumedMacros.fat}g`}
+                  subtitle={`of ${profile?.target_macros.fat || 0}g`}
+                />
+              </CardGroup>
+            </Card>
 
-            {/* Macros Grid */}
-            <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6 mb-6">
-            <h2 className="text-xl font-semibold text-white mb-6">Macronutrients</h2>
-            
-            <div className="space-y-6">
-              {/* Protein */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="font-medium text-gray-300">Protein</span>
-                  <span className="text-sm text-gray-400">
-                    {todayLog?.protein || 0}g / {profile?.target_macros.protein}g
-                  </span>
+            {/* Today's Meals */}
+            {mealGroups.length > 0 && (
+              <Card variant="elevated" className="mb-6">
+                <h2 className="text-xl font-semibold mb-6">Today's Meals</h2>
+                <div className="space-y-6">
+                  {mealGroups.map((group) => (
+                    <div key={group.type}>
+                      <div className="flex justify-between items-center mb-3">
+                        <h3 className="font-medium capitalize">{group.type}</h3>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/add-food?meal=${group.type}`)}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        {group.meals.map((meal) => (
+                          <div key={meal.id} className="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                            <div>
+                              <p className="font-medium">{meal.food?.name}</p>
+                              <p className="text-sm text-gray-400">{meal.amount_grams}g</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-medium">{Math.round((meal.food?.calories_per_100g || 0) * meal.amount_grams / 100)} cal</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="w-full bg-gray-700 rounded-full h-3">
-                  <div
-                    className="bg-red-500 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${calculatePercentage(todayLog?.protein || 0, profile?.target_macros.protein || 1)}%` }}
-                  />
-                </div>
-              </div>
+              </Card>
+            )}
 
-              {/* Carbs */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="font-medium text-gray-300">Carbohydrates</span>
-                  <span className="text-sm text-gray-400">
-                    {todayLog?.carbs || 0}g / {profile?.target_macros.carbs}g
-                  </span>
-                </div>
-                <div className="w-full bg-gray-700 rounded-full h-3">
-                  <div
-                    className="bg-green-500 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${calculatePercentage(todayLog?.carbs || 0, profile?.target_macros.carbs || 1)}%` }}
+            {/* TDEE & Coaching Section */}
+            {tdeeData && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <TDEECard tdeeData={tdeeData} />
+                {recommendations.length > 0 && (
+                  <CoachingRecommendations 
+                    recommendations={recommendations}
+                    onApplyChanges={(changes) => handleApplyRecommendation(changes)}
                   />
-                </div>
+                )}
               </div>
-
-              {/* Fat */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="font-medium text-gray-300">Fat</span>
-                  <span className="text-sm text-gray-400">
-                    {todayLog?.fat || 0}g / {profile?.target_macros.fat}g
-                  </span>
-                </div>
-                <div className="w-full bg-gray-700 rounded-full h-3">
-                  <div
-                    className="bg-yellow-500 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${calculatePercentage(todayLog?.fat || 0, profile?.target_macros.fat || 1)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Fiber */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="font-medium text-gray-300">Fiber</span>
-                  <span className="text-sm text-gray-400">
-                    {todayLog?.fiber || 0}g / {profile?.target_macros.fiber || 30}g
-                  </span>
-                </div>
-                <div className="w-full bg-gray-700 rounded-full h-3">
-                  <div
-                    className="bg-purple-500 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${calculatePercentage(todayLog?.fiber || 0, profile?.target_macros.fiber || 30)}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+            )}
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => navigate('/diary')}
-                className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6 hover:bg-gray-750 transition-colors flex flex-col items-center"
-              >
-                <svg className="w-8 h-8 text-blue-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span className="font-medium text-white">Food Diary</span>
-              </button>
-              
-              <button
-                onClick={() => navigate('/progress')}
-                className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6 hover:bg-gray-750 transition-colors flex flex-col items-center"
-              >
-                <svg className="w-8 h-8 text-green-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <span className="font-medium text-white">Progress</span>
-              </button>
-            </div>
+            <Card variant="elevated" className="mb-6">
+              <h2 className="text-xl font-semibold mb-6">Quick Actions</h2>
+              <div className="space-y-3">
+                <Button
+                  onClick={() => navigate('/diary')}
+                  variant="primary"
+                  size="lg"
+                  className="w-full"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  }
+                >
+                  View Food Diary
+                </Button>
+                <Button
+                  onClick={() => navigate('/add-food?meal=snack')}
+                  variant="secondary"
+                  size="lg"
+                  className="w-full"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  }
+                >
+                  Add Food
+                </Button>
+                <Button
+                  onClick={() => navigate('/progress')}
+                  variant="secondary"
+                  size="lg"
+                  className="w-full"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  }
+                >
+                  View Progress
+                </Button>
+                <Button
+                  onClick={() => navigate('/weekly-check-in')}
+                  variant="secondary"
+                  size="lg"
+                  className="w-full"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  }
+                >
+                  Weekly Check-In
+                </Button>
+              </div>
+            </Card>
+
+            {/* Today's Summary */}
+            {todayLog && (
+              <Card variant="glass">
+                <h2 className="text-xl font-semibold mb-6">Today's Summary</h2>
+                <CardGroup>
+                  <MetricCard
+                    title="Meals Logged"
+                    value={meals.length.toString()}
+                    subtitle="entries today"
+                  />
+                  <MetricCard
+                    title="Fiber"
+                    value={`${consumedMacros.fiber}g`}
+                    subtitle="consumed"
+                  />
+                  <MetricCard
+                    title="Goal Type"
+                    value={profile?.goal_type || 'maintenance'}
+                    subtitle="current program"
+                  />
+                </CardGroup>
+              </Card>
+            )}
           </div>
         </div>
       </div>

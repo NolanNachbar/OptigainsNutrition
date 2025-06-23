@@ -23,7 +23,16 @@ export interface UserNutritionProfile {
   coaching_mode: CoachingMode;
   goal_type: GoalType;
   target_macros: Macros;
-  activity_level: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+  activity_level: 'sedentary' | 'lightly_active' | 'moderate' | 'very_active' | 'extra_active';
+  age?: number;
+  biological_sex?: 'male' | 'female';
+  height_cm?: number;
+  weight_kg?: number;
+  experience_level?: 'beginner' | 'intermediate' | 'advanced';
+  protein_target?: 'low' | 'medium' | 'high' | 'very_high';
+  diet_type?: 'balanced' | 'low_carb' | 'low_fat' | 'keto' | 'plant_based';
+  body_weight_unit?: 'metric' | 'imperial';
+  food_weight_unit?: 'metric' | 'imperial';
   created_at?: string;
   updated_at?: string;
 }
