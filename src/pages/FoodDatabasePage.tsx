@@ -145,7 +145,33 @@ const FoodDatabasePage: React.FC = () => {
       
       <div className="w-full pt-24 pb-20">
         <div className="max-w-4xl mx-auto px-4">
-          <h1 className="text-2xl font-bold mb-6">Food Database</h1>
+          <div className="mb-6">
+            <h1 className="text-4xl font-bold tracking-tight">Food Database</h1>
+            <p className="text-gray-400 mt-2">Manage your custom foods and recipes</p>
+          </div>
+          
+          {/* Action Buttons */}
+          <div className="flex gap-3 mb-6">
+            <button
+              onClick={() => navigate('/add-food')}
+              className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create Custom Food
+            </button>
+            <button
+              onClick={() => navigate('/recipe-builder')}
+              className="flex-1 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Build Recipe
+            </button>
+          </div>
+          
           <div className="max-w-2xl mx-auto">
             {/* Search Bar */}
             <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-4">

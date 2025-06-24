@@ -5,7 +5,7 @@ import { format, addDays, subDays } from 'date-fns';
 import { Meal, NutritionLog, MealType, UserNutritionProfile } from '../utils/types';
 import Actionbar from '../components/Actionbar';
 import { getMealsByDate, deleteMeal, getNutritionLog, getUserProfile } from '../utils/database';
-import { copyMealsFromDate } from '../utils/nutritionDatabase';
+// Removed copyMealsFromDate import - function needs to be implemented
 import { formatWeight } from '../utils/unitConversions';
 
 interface MealGroup {
@@ -131,17 +131,19 @@ const FoodDiaryPage: React.FC = () => {
   const handleCopyPreviousDay = async () => {
     if (!user) return;
     
-    const fromDate = format(subDays(selectedDate, 1), 'yyyy-MM-dd');
-    const toDate = format(selectedDate, 'yyyy-MM-dd');
+    // const fromDate = format(subDays(selectedDate, 1), 'yyyy-MM-dd');
+    // const toDate = format(selectedDate, 'yyyy-MM-dd');
     
     try {
-      const success = await copyMealsFromDate(user.id, fromDate, toDate);
-      if (success) {
-        // Refresh meals after copying
-        await fetchMeals();
-      } else {
-        alert('No meals found on the previous day to copy.');
-      }
+      // TODO: Implement copyMealsFromDate functionality
+      // const success = await copyMealsFromDate(user.id, fromDate, toDate);
+      // if (success) {
+      //   // Refresh meals after copying
+      //   await fetchMeals();
+      // } else {
+      //   alert('No meals found on the previous day to copy.');
+      // }
+      alert('Copy previous day feature is not yet implemented');
     } catch (error) {
       console.error('Error copying meals:', error);
       alert('Failed to copy meals from previous day.');

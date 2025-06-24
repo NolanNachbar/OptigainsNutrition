@@ -7,13 +7,14 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_KEY;
 
 // Create a Supabase client without auth for initial setup
-export const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
+// Disabled to prevent multiple GoTrueClient instances warning
+// export const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
 
 // Hook to get Supabase client with Clerk auth
 export function useSupabaseClient() {
   const { getToken } = useAuth();
   const { session } = useSession();
-  const [client, setClient] = useState<SupabaseClient>(supabase);
+  const [client, setClient] = useState<SupabaseClient | null>(null);
 
   useEffect(() => {
     const setupClient = async () => {
@@ -42,8 +43,9 @@ export function useSupabaseClient() {
           }
         } catch (error) {
           console.error('Error setting up Supabase client with Clerk token:', error);
-          // Fall back to anon client
-          setClient(supabase);
+          // Create anon client as fallback
+          const anonClient = createClient(supabaseUrl!, supabaseAnonKey!);
+          setClient(anonClient);
         }
       }
     };
@@ -61,7 +63,7 @@ export async function getAuthenticatedSupabaseClient(getToken: () => Promise<str
     
     if (!token) {
       console.warn('No Clerk token available, using anonymous Supabase client');
-      return supabase;
+      return createClient(supabaseUrl!, supabaseAnonKey!);
     }
 
     return createClient(
@@ -80,6 +82,6 @@ export async function getAuthenticatedSupabaseClient(getToken: () => Promise<str
     );
   } catch (error) {
     console.error('Error creating authenticated Supabase client:', error);
-    return supabase;
+    return createClient(supabaseUrl!, supabaseAnonKey!);
   }
 }

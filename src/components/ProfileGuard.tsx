@@ -24,13 +24,21 @@ export const ProfileGuard: React.FC<ProfileGuardProps> = ({ children, requireCom
 
       try {
         const profile = await getUserProfile(user.id);
+        
+        console.log('[ProfileGuard] Profile data:', profile);
+        
+        // Check if basic profile exists with required fields
         const isComplete = !!(
           profile && 
-          profile.age && 
-          profile.height_cm && 
-          profile.weight_kg && 
-          profile.tdee_estimate > 0
+          profile.tdee_estimate && 
+          profile.tdee_estimate > 0 &&
+          profile.goal_type &&
+          profile.coaching_mode &&
+          profile.target_macros &&
+          profile.activity_level
         );
+        
+        console.log('[ProfileGuard] Profile complete:', isComplete);
         setHasCompleteProfile(isComplete);
       } catch (error) {
         console.error('Error checking profile:', error);

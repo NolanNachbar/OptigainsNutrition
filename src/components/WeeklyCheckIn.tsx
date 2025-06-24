@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
-import { ProgressRing } from './ui/ProgressRing';
 import { 
   getUserProfile, 
   getWeightEntries, 
@@ -13,7 +12,7 @@ import {
 } from '../utils/database';
 import { calculateAdaptiveTDEE, getTDEERecommendations } from '../utils/adaptiveTDEE';
 import { WeeklyCheckIn as WeeklyCheckInType, UserNutritionProfile } from '../utils/types';
-import { format, subDays, startOfWeek } from 'date-fns';
+import { startOfWeek } from 'date-fns';
 
 interface CheckInStep {
   id: string;
@@ -28,7 +27,6 @@ export const WeeklyCheckIn: React.FC = () => {
   const [profile, setProfile] = useState<UserNutritionProfile | null>(null);
   const [weekData, setWeekData] = useState<any>({});
   const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [lastCheckIn, setLastCheckIn] = useState<WeeklyCheckInType | null>(null);
   
   // Form data
   const [energyLevel, setEnergyLevel] = useState(3);
@@ -52,9 +50,8 @@ export const WeeklyCheckIn: React.FC = () => {
       if (!userProfile) return;
       setProfile(userProfile);
       
-      // Get last check-in
-      const lastCheck = await getLatestWeeklyCheckIn(user.id);
-      setLastCheckIn(lastCheck);
+      // Get last check-in if needed later
+      await getLatestWeeklyCheckIn(user.id);
       
       // Get weight data for past 2 weeks
       const weights = await getWeightEntries(user.id, 14);

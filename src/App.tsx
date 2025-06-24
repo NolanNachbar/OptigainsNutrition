@@ -14,6 +14,9 @@ import FoodDatabasePage from "./pages/FoodDatabasePage";
 import SettingsPage from "./pages/SettingsPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import WeeklyCheckInPage from "./pages/WeeklyCheckInPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import RecipeBuilderPage from "./pages/RecipeBuilderPage";
+import MeasurementsPage from "./pages/MeasurementsPage";
 
 // Utils and Components
 import { initializeDatabase } from "./utils/database";
@@ -192,6 +195,51 @@ const App: React.FC = () => {
                       <SignedIn>
                         <ProfileGuard requireComplete={true}>
                           <WeeklyCheckInPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/analytics"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <AnalyticsPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/recipe-builder"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <RecipeBuilderPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/measurements"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <MeasurementsPage />
                         </ProfileGuard>
                       </SignedIn>
                       <SignedOut>

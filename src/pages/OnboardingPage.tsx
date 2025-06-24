@@ -10,7 +10,7 @@ import { UserNutritionProfile, GoalType } from '../utils/types';
 interface OnboardingData {
   // Biological Data
   dateOfBirth: string;
-  biologicalSex: 'male' | 'female' | 'other';
+  biologicalSex: 'male' | 'female';
   heightFeet: string;
   heightInches: string;
   heightCm: string;
@@ -264,23 +264,39 @@ const OnboardingPage: React.FC = () => {
         heightCm = (feet * 12 + inches) * 2.54;
       }
       
+      // Create profile with only the fields that exist in the database
       const profile: UserNutritionProfile = {
         clerk_user_id: user.id,
         tdee_estimate: tdee,
         coaching_mode: data.coachingMode,
         goal_type: data.goal,
         target_macros: macros,
-        activity_level: data.activityLevel,
+        activity_level: data.activityLevel
+      };
+      
+      // Store additional data in local storage for now
+      const additionalData = {
         age: calculateAge(),
-        biological_sex: data.biologicalSex === 'other' ? 'male' : data.biologicalSex, // Store as male if other for DB compatibility
+        biological_sex: data.biologicalSex,
         height_cm: heightCm,
         weight_kg: data.weightUnit === 'kg' ? parseFloat(data.weight) : parseFloat(data.weight) * 0.453592,
         body_weight_unit: data.weightUnit === 'kg' ? 'metric' : 'imperial',
-        food_weight_unit: 'metric'  // Always default food unit to metric
+        food_weight_unit: 'metric'
       };
+      localStorage.setItem(`user_data_${user.id}`, JSON.stringify(additionalData));
       
-      await createOrUpdateUserProfile(profile);
-      navigate('/dashboard');
+      console.log('[Onboarding] Saving profile:', profile);
+      const success = await createOrUpdateUserProfile(profile);
+      console.log('[Onboarding] Profile save result:', success);
+      
+      if (success) {
+        // Add a small delay to ensure the profile is saved
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 500);
+      } else {
+        throw new Error('Failed to save profile');
+      }
     } catch (error) {
       console.error('Error creating profile:', error);
       alert('Failed to create profile. Please try again.');
@@ -303,11 +319,10 @@ const OnboardingPage: React.FC = () => {
                 <label className="block text-sm font-medium mb-2">Sex</label>
                 <RadioButtonGroup
                   value={data.biologicalSex}
-                  onChange={(value) => setData({ ...data, biologicalSex: value as 'male' | 'female' | 'other' })}
+                  onChange={(value) => setData({ ...data, biologicalSex: value as 'male' | 'female' })}
                   options={[
                     { value: 'male', label: 'Male' },
-                    { value: 'female', label: 'Female' },
-                    { value: 'other', label: 'Other' }
+                    { value: 'female', label: 'Female' }
                   ]}
                 />
               </div>

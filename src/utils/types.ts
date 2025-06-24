@@ -155,3 +155,69 @@ export interface WeeklyCheckIn {
   macro_adjustment?: Macros; // New targets after check-in
   created_at?: string;
 }
+
+// Recipe Types
+export interface RecipeIngredient {
+  food_id: string;
+  food?: Food;
+  amount_grams: number;
+}
+
+export interface Recipe {
+  id?: string;
+  clerk_user_id: string;
+  name: string;
+  description?: string;
+  servings: number;
+  prep_time_minutes?: number;
+  cook_time_minutes?: number;
+  instructions?: string;
+  ingredients: RecipeIngredient[];
+  is_public: boolean;
+  created_at?: string;
+  updated_at?: string;
+  // Calculated fields
+  total_calories?: number;
+  total_protein?: number;
+  total_carbs?: number;
+  total_fat?: number;
+  total_fiber?: number;
+  calories_per_serving?: number;
+  protein_per_serving?: number;
+  carbs_per_serving?: number;
+  fat_per_serving?: number;
+  fiber_per_serving?: number;
+}
+
+// Macro targets type alias
+export type MacroTargets = Macros;
+
+// Body Measurements
+export interface BodyMeasurement {
+  id?: string;
+  clerk_user_id: string;
+  date: string;
+  // Core measurements
+  weight?: number; // kg
+  body_fat_percentage?: number;
+  // Upper body
+  neck?: number; // cm
+  shoulders?: number;
+  chest?: number;
+  left_bicep?: number;
+  right_bicep?: number;
+  left_forearm?: number;
+  right_forearm?: number;
+  // Core
+  waist?: number;
+  hips?: number;
+  // Lower body
+  left_thigh?: number;
+  right_thigh?: number;
+  left_calf?: number;
+  right_calf?: number;
+  // Additional
+  notes?: string;
+  photos?: string[]; // URLs to progress photos
+  created_at?: string;
+}

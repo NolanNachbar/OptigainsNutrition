@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
+import { useNavigate } from 'react-router-dom';
 import { format, subDays } from 'date-fns';
 import { Line } from 'react-chartjs-2';
 import {
@@ -33,6 +34,7 @@ ChartJS.register(
 
 const ProgressPage: React.FC = () => {
   const { user } = useUser();
+  const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState<'week' | 'month' | '3months'>('month');
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
   const [nutritionLogs, setNutritionLogs] = useState<NutritionLog[]>([]);
@@ -242,18 +244,32 @@ const ProgressPage: React.FC = () => {
         <Card variant="elevated" className="mb-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold">Weight Tracking</h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowWeightModal(true)}
-              icon={
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              }
-            >
-              Add Entry
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/measurements')}
+                icon={
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                  </svg>
+                }
+              >
+                Measurements
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowWeightModal(true)}
+                icon={
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                }
+              >
+                Add Weight
+              </Button>
+            </div>
           </div>
           
           <CardGroup>

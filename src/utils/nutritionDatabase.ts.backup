@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+// Removed direct supabase import - using database abstraction instead
 import {
   UserNutritionProfile,
   Food,
@@ -470,7 +470,7 @@ export async function getMealTemplates(userId: string): Promise<MealTemplate[]> 
     return [];
   }
 
-  return data?.map(template => ({
+  return data?.map((template: any) => ({
     ...template,
     total_macros: {
       calories: template.total_calories,

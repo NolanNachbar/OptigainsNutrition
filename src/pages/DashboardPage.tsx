@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { NutritionLog, UserNutritionProfile, Meal, MealType } from '../utils/types';
 import Actionbar from '../components/Actionbar';
-import { getUserProfile, createOrUpdateUserProfile, getNutritionLog, getMealsByDate, getWeightEntries } from '../utils/database';
+import { getUserProfile, createOrUpdateUserProfile, getNutritionLog, getMealsByDate, getWeightEntries, getLatestWeeklyCheckIn } from '../utils/database';
 import { Card, MetricCard, CardGroup } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { MultiProgressRing, MiniProgressRing } from '../components/ui/ProgressRing';
@@ -43,6 +43,7 @@ const DashboardPage: React.FC = () => {
   const [recommendations, setRecommendations] = useState<SimpleRecommendation[]>([]);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [showCheckInReminder, setShowCheckInReminder] = useState(false);
 
   const today = format(new Date(), 'yyyy-MM-dd');
 
@@ -147,6 +148,16 @@ const DashboardPage: React.FC = () => {
         // Fetch today's meals
         const todayMeals = await getMealsByDate(user.id, today);
         setMeals(todayMeals);
+        
+        // Check if weekly check-in is due
+        const lastCheckIn = await getLatestWeeklyCheckIn(user.id);
+        if (lastCheckIn) {
+          const daysSinceLastCheckIn = differenceInDays(new Date(), new Date(lastCheckIn.week_start_date));
+          setShowCheckInReminder(daysSinceLastCheckIn >= 7);
+        } else {
+          // No check-in history, show reminder
+          setShowCheckInReminder(true);
+        }
       }
       
       // Only set loading to false if we've successfully loaded everything
@@ -236,6 +247,32 @@ const DashboardPage: React.FC = () => {
           </div>
           
           <div className="max-w-2xl mx-auto">
+            {/* Weekly Check-in Reminder */}
+            {showCheckInReminder && (
+              <Card variant="elevated" className="mb-6 bg-blue-500/10 border-blue-500/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-blue-500/20 rounded-lg">
+                      <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-white">Time for your weekly check-in!</h3>
+                      <p className="text-sm text-gray-400 mt-1">Review your progress and get personalized recommendations</p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => navigate('/weekly-check-in')}
+                    variant="primary"
+                    size="md"
+                  >
+                    Check In Now
+                  </Button>
+                </div>
+              </Card>
+            )}
+
             {/* Macros Summary */}
             <Card variant="glass" className="mb-6">
               <div className="flex justify-between items-center mb-6">
@@ -422,6 +459,19 @@ const DashboardPage: React.FC = () => {
                   }
                 >
                   Weekly Check-In
+                </Button>
+                <Button
+                  onClick={() => navigate('/analytics')}
+                  variant="secondary"
+                  size="lg"
+                  className="w-full"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  }
+                >
+                  View Analytics
                 </Button>
               </div>
             </Card>

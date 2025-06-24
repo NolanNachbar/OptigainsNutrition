@@ -9,7 +9,7 @@ import {
 } from '../utils/types';
 import Actionbar from '../components/Actionbar';
 import { getUserProfile, createOrUpdateUserProfile, createWeeklyCheckIn } from '../utils/database';
-import { getWeightRange, calculateWeeklyAverages } from '../utils/nutritionDatabase';
+import { getWeightRange, calculateWeeklyAverages } from '../utils/database';
 import { calculateMacroTargets, adjustMacrosFromCheckIn } from '../utils/tdeeCalculator';
 import { Card, MetricCard, CardGroup } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';

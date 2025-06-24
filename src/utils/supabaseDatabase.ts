@@ -26,6 +26,11 @@ export class SupabaseDB {
 
   // Set the Clerk token getter function
   setClerkTokenGetter(getter: () => Promise<string | null>) {
+    if (this.getClerkToken) {
+      console.log('[SupabaseDB] Token getter already set, skipping');
+      return;
+    }
+    console.log('[SupabaseDB] Setting Clerk token getter');
     this.getClerkToken = getter;
   }
 
@@ -127,9 +132,26 @@ export class SupabaseDB {
       target_fiber: target_macros.fiber || 30
     };
 
-    const { error } = await client
+    // First check if profile exists
+    const { data: existing } = await client
       .from('user_nutrition_profiles')
-      .upsert(dbProfile, { onConflict: 'clerk_user_id' });
+      .select('id')
+      .eq('clerk_user_id', profile.clerk_user_id)
+      .maybeSingle();
+    
+    let error;
+    if (existing) {
+      // Update existing profile
+      ({ error } = await client
+        .from('user_nutrition_profiles')
+        .update(dbProfile)
+        .eq('clerk_user_id', profile.clerk_user_id));
+    } else {
+      // Insert new profile
+      ({ error } = await client
+        .from('user_nutrition_profiles')
+        .insert(dbProfile));
+    }
 
     if (error) {
       console.error('Error updating user profile:', error);
@@ -581,8 +603,17 @@ export class SupabaseDB {
   }
 }
 
-// Create and export the database instance
-export const db = new SupabaseDB(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_KEY
-);
+// Singleton instance
+let dbInstance: SupabaseDB | null = null;
+
+// Create and export the database instance as a singleton
+export const db = (() => {
+  if (!dbInstance) {
+    console.log('[SupabaseDB] Creating singleton instance');
+    dbInstance = new SupabaseDB(
+      import.meta.env.VITE_SUPABASE_URL,
+      import.meta.env.VITE_SUPABASE_KEY
+    );
+  }
+  return dbInstance;
+})();
