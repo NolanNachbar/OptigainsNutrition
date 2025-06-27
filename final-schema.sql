@@ -1,10 +1,14 @@
--- OptiGains Nutrition Database Schema
--- This script will drop and recreate tables to ensure clean setup
+-- OptiGains Nutrition Database Schema - Final Version
+-- Enhanced schema to align with TypeScript types and add missing fields
 
 -- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Drop existing tables if they exist (in reverse order of dependencies)
+DROP TABLE IF EXISTS public.body_measurements CASCADE;
+DROP TABLE IF EXISTS public.habit_entries CASCADE;
+DROP TABLE IF EXISTS public.expenditure_data CASCADE;
+DROP TABLE IF EXISTS public.recipes CASCADE;
 DROP TABLE IF EXISTS public.weekly_check_ins CASCADE;
 DROP TABLE IF EXISTS public.meal_templates CASCADE;
 DROP TABLE IF EXISTS public.quick_add_foods CASCADE;
@@ -23,14 +27,14 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- User nutrition profiles table
+-- User nutrition profiles table - Enhanced with missing fields
 CREATE TABLE public.user_nutrition_profiles (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   clerk_user_id text NOT NULL UNIQUE,
   tdee_estimate integer NOT NULL DEFAULT 2500,
   coaching_mode text NOT NULL DEFAULT 'coached' CHECK (coaching_mode IN ('coached', 'manual', 'collaborative')),
   goal_type text NOT NULL DEFAULT 'maintenance' CHECK (goal_type IN ('maintenance', 'gain', 'cut', 'recomp')),
-  activity_level text NOT NULL DEFAULT 'moderate' CHECK (activity_level IN ('sedentary', 'light', 'moderate', 'active', 'very_active')),
+  activity_level text NOT NULL DEFAULT 'moderate' CHECK (activity_level IN ('sedentary', 'lightly_active', 'moderate', 'very_active', 'extra_active')),
   target_calories integer NOT NULL DEFAULT 2500,
   target_protein integer NOT NULL DEFAULT 150,
   target_carbs integer NOT NULL DEFAULT 250,
@@ -38,15 +42,21 @@ CREATE TABLE public.user_nutrition_profiles (
   target_fiber integer DEFAULT 30,
   height_cm numeric(5,2),
   age integer,
-  sex text CHECK (sex IN ('male', 'female', 'other')),
+  biological_sex text CHECK (biological_sex IN ('male', 'female')),
+  weight_kg numeric(5,2),
+  experience_level text CHECK (experience_level IN ('beginner', 'intermediate', 'advanced')),
+  protein_target text CHECK (protein_target IN ('low', 'medium', 'high', 'very_high')),
+  diet_type text CHECK (diet_type IN ('balanced', 'low_carb', 'low_fat', 'keto', 'plant_based')),
+  body_weight_unit text DEFAULT 'metric' CHECK (body_weight_unit IN ('metric', 'imperial')),
+  food_weight_unit text DEFAULT 'metric' CHECK (food_weight_unit IN ('metric', 'imperial')),
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT user_nutrition_profiles_pkey PRIMARY KEY (id)
-) TABLESPACE pg_default;
+);
 
 -- Create indexes
 CREATE INDEX idx_user_nutrition_profiles_clerk_user 
-ON public.user_nutrition_profiles USING btree (clerk_user_id) TABLESPACE pg_default;
+ON public.user_nutrition_profiles USING btree (clerk_user_id);
 
 -- Enable RLS
 ALTER TABLE public.user_nutrition_profiles ENABLE ROW LEVEL SECURITY;
@@ -74,30 +84,21 @@ CREATE TABLE public.foods (
   saturated_fat_per_100g numeric(10,2),
   sodium_per_100g numeric(10,2),
   user_id text, -- NULL for public foods
+  clerk_user_id text, -- Alternative field name for user-created foods
   is_verified boolean DEFAULT false,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT foods_pkey PRIMARY KEY (id)
-) TABLESPACE pg_default;
+);
 
 -- Create indexes
-CREATE INDEX idx_foods_name 
-ON public.foods USING btree (name) TABLESPACE pg_default;
-
-CREATE INDEX idx_foods_barcode 
-ON public.foods USING btree (barcode) TABLESPACE pg_default;
-
-CREATE INDEX idx_foods_user 
-ON public.foods USING btree (user_id) TABLESPACE pg_default;
+CREATE INDEX idx_foods_name ON public.foods USING btree (name);
+CREATE INDEX idx_foods_barcode ON public.foods USING btree (barcode);
+CREATE INDEX idx_foods_user ON public.foods USING btree (user_id);
+CREATE INDEX idx_foods_clerk_user ON public.foods USING btree (clerk_user_id);
 
 -- Enable RLS
 ALTER TABLE public.foods ENABLE ROW LEVEL SECURITY;
-
--- Trigger for updated_at
-CREATE TRIGGER update_foods_updated_at 
-BEFORE UPDATE ON foods 
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
 
 -- Weight entries table
 CREATE TABLE public.weight_entries (
@@ -110,16 +111,16 @@ CREATE TABLE public.weight_entries (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT weight_entries_pkey PRIMARY KEY (id),
   CONSTRAINT weight_entries_unique_user_date UNIQUE (clerk_user_id, date)
-) TABLESPACE pg_default;
+);
 
 -- Create indexes
 CREATE INDEX idx_weight_entries_user_date 
-ON public.weight_entries USING btree (clerk_user_id, date DESC) TABLESPACE pg_default;
+ON public.weight_entries USING btree (clerk_user_id, date DESC);
 
 -- Enable RLS
 ALTER TABLE public.weight_entries ENABLE ROW LEVEL SECURITY;
 
--- Daily nutrition logs table
+-- Daily nutrition logs table - Enhanced with missing fields
 CREATE TABLE public.nutrition_logs (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   clerk_user_id text NOT NULL,
@@ -139,11 +140,11 @@ CREATE TABLE public.nutrition_logs (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT nutrition_logs_pkey PRIMARY KEY (id),
   CONSTRAINT nutrition_logs_unique_user_date UNIQUE (clerk_user_id, date)
-) TABLESPACE pg_default;
+);
 
 -- Create indexes
 CREATE INDEX idx_nutrition_logs_user_date 
-ON public.nutrition_logs USING btree (clerk_user_id, date DESC) TABLESPACE pg_default;
+ON public.nutrition_logs USING btree (clerk_user_id, date DESC);
 
 -- Enable RLS
 ALTER TABLE public.nutrition_logs ENABLE ROW LEVEL SECURITY;
@@ -170,17 +171,21 @@ CREATE TABLE public.meals (
     REFERENCES foods (id) ON DELETE RESTRICT,
   CONSTRAINT meals_nutrition_log_id_fkey FOREIGN KEY (nutrition_log_id) 
     REFERENCES nutrition_logs (id) ON DELETE CASCADE
-) TABLESPACE pg_default;
+);
 
 -- Create indexes
 CREATE INDEX idx_meals_user_date 
-ON public.meals USING btree (clerk_user_id, logged_at DESC) TABLESPACE pg_default;
+ON public.meals USING btree (clerk_user_id, logged_at DESC);
 
 CREATE INDEX idx_meals_food 
-ON public.meals USING btree (food_id) TABLESPACE pg_default;
+ON public.meals USING btree (food_id);
 
 CREATE INDEX idx_meals_nutrition_log 
-ON public.meals USING btree (nutrition_log_id) TABLESPACE pg_default;
+ON public.meals USING btree (nutrition_log_id);
+
+-- Create index for common queries (without date extraction to avoid immutability issues)
+CREATE INDEX idx_meals_user_enhanced
+ON meals(clerk_user_id, meal_type, food_id, amount_grams, logged_at);
 
 -- Enable RLS
 ALTER TABLE public.meals ENABLE ROW LEVEL SECURITY;
@@ -198,19 +203,19 @@ CREATE TABLE public.quick_add_foods (
   CONSTRAINT quick_add_foods_unique_user_food UNIQUE (clerk_user_id, food_id),
   CONSTRAINT quick_add_foods_food_id_fkey FOREIGN KEY (food_id) 
     REFERENCES foods (id) ON DELETE CASCADE
-) TABLESPACE pg_default;
+);
 
 -- Create indexes
 CREATE INDEX idx_quick_add_foods_user 
-ON public.quick_add_foods USING btree (clerk_user_id) TABLESPACE pg_default;
+ON public.quick_add_foods USING btree (clerk_user_id);
 
 CREATE INDEX idx_quick_add_foods_frequency 
-ON public.quick_add_foods USING btree (clerk_user_id, frequency DESC) TABLESPACE pg_default;
+ON public.quick_add_foods USING btree (clerk_user_id, frequency DESC, last_used DESC);
 
 -- Enable RLS
 ALTER TABLE public.quick_add_foods ENABLE ROW LEVEL SECURITY;
 
--- Meal templates table
+-- Meal templates table - Enhanced with proper macro calculations
 CREATE TABLE public.meal_templates (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   clerk_user_id text NOT NULL,
@@ -225,11 +230,11 @@ CREATE TABLE public.meal_templates (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT meal_templates_pkey PRIMARY KEY (id)
-) TABLESPACE pg_default;
+);
 
 -- Create indexes
 CREATE INDEX idx_meal_templates_user 
-ON public.meal_templates USING btree (clerk_user_id) TABLESPACE pg_default;
+ON public.meal_templates USING btree (clerk_user_id);
 
 -- Enable RLS
 ALTER TABLE public.meal_templates ENABLE ROW LEVEL SECURITY;
@@ -240,7 +245,7 @@ BEFORE UPDATE ON meal_templates
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
--- Weekly check-ins table
+-- Weekly check-ins table - Enhanced with additional fields
 CREATE TABLE public.weekly_check_ins (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   clerk_user_id text NOT NULL,
@@ -251,6 +256,10 @@ CREATE TABLE public.weekly_check_ins (
   average_carbs numeric(10,2),
   average_fat numeric(10,2),
   adherence_percentage integer CHECK (adherence_percentage >= 0 AND adherence_percentage <= 100),
+  weight_change_kg numeric(5,2),
+  estimated_tdee integer,
+  expenditure_trend text CHECK (expenditure_trend IN ('increasing', 'decreasing', 'stable')),
+  logging_days integer,
   energy_level integer CHECK (energy_level >= 1 AND energy_level <= 5),
   hunger_level integer CHECK (hunger_level >= 1 AND hunger_level <= 5),
   training_performance integer CHECK (training_performance >= 1 AND training_performance <= 5),
@@ -262,18 +271,148 @@ CREATE TABLE public.weekly_check_ins (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT weekly_check_ins_pkey PRIMARY KEY (id),
   CONSTRAINT weekly_check_ins_unique_user_week UNIQUE (clerk_user_id, week_start_date)
-) TABLESPACE pg_default;
+);
 
 -- Create indexes
 CREATE INDEX idx_weekly_check_ins_user_date 
-ON public.weekly_check_ins USING btree (clerk_user_id, week_start_date DESC) TABLESPACE pg_default;
+ON public.weekly_check_ins USING btree (clerk_user_id, week_start_date DESC);
 
 -- Enable RLS
 ALTER TABLE public.weekly_check_ins ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies for all tables
--- Note: These policies use auth.jwt() ->> 'sub' to match Clerk's JWT structure
+-- Expenditure data table - New table for TDEE tracking
+CREATE TABLE public.expenditure_data (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  clerk_user_id text NOT NULL,
+  date date NOT NULL,
+  estimated_tdee integer NOT NULL,
+  confidence integer CHECK (confidence >= 0 AND confidence <= 100),
+  weight_kg numeric(5,2) NOT NULL,
+  calories_consumed numeric(10,2) NOT NULL,
+  weight_change_7d numeric(5,2),
+  weight_change_14d numeric(5,2),
+  calorie_average_7d numeric(10,2),
+  calorie_average_14d numeric(10,2),
+  trend text CHECK (trend IN ('gaining', 'losing', 'maintaining')),
+  algorithm_version text NOT NULL DEFAULT 'v1.0',
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT expenditure_data_pkey PRIMARY KEY (id),
+  CONSTRAINT expenditure_data_unique_user_date UNIQUE (clerk_user_id, date)
+);
 
+-- Create indexes
+CREATE INDEX idx_expenditure_data_user_date 
+ON public.expenditure_data USING btree (clerk_user_id, date DESC);
+
+-- Enable RLS
+ALTER TABLE public.expenditure_data ENABLE ROW LEVEL SECURITY;
+
+-- Habit entries table - New table for habit tracking
+CREATE TABLE public.habit_entries (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  clerk_user_id text NOT NULL,
+  date date NOT NULL,
+  logged_food boolean DEFAULT false,
+  logged_weight boolean DEFAULT false,
+  hit_calorie_target boolean DEFAULT false,
+  hit_protein_target boolean DEFAULT false,
+  exercise_completed boolean DEFAULT false,
+  sleep_hours numeric(3,1),
+  water_intake_liters numeric(4,2),
+  stress_level integer CHECK (stress_level >= 1 AND stress_level <= 5),
+  energy_level integer CHECK (energy_level >= 1 AND energy_level <= 5),
+  hunger_level integer CHECK (hunger_level >= 1 AND hunger_level <= 5),
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT habit_entries_pkey PRIMARY KEY (id),
+  CONSTRAINT habit_entries_unique_user_date UNIQUE (clerk_user_id, date)
+);
+
+-- Create indexes
+CREATE INDEX idx_habit_entries_user_date 
+ON public.habit_entries USING btree (clerk_user_id, date DESC);
+
+-- Enable RLS
+ALTER TABLE public.habit_entries ENABLE ROW LEVEL SECURITY;
+
+-- Recipes table - New table for recipe management
+CREATE TABLE public.recipes (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  clerk_user_id text NOT NULL,
+  name character varying(255) NOT NULL,
+  description text,
+  servings integer NOT NULL DEFAULT 1,
+  prep_time_minutes integer,
+  cook_time_minutes integer,
+  instructions text,
+  ingredients jsonb NOT NULL DEFAULT '[]'::jsonb, -- Array of {food_id, amount_grams}
+  is_public boolean DEFAULT false,
+  total_calories numeric(10,2),
+  total_protein numeric(10,2),
+  total_carbs numeric(10,2),
+  total_fat numeric(10,2),
+  total_fiber numeric(10,2),
+  calories_per_serving numeric(10,2),
+  protein_per_serving numeric(10,2),
+  carbs_per_serving numeric(10,2),
+  fat_per_serving numeric(10,2),
+  fiber_per_serving numeric(10,2),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT recipes_pkey PRIMARY KEY (id)
+);
+
+-- Create indexes
+CREATE INDEX idx_recipes_user 
+ON public.recipes USING btree (clerk_user_id);
+
+CREATE INDEX idx_recipes_public 
+ON public.recipes USING btree (is_public) WHERE is_public = true;
+
+-- Enable RLS
+ALTER TABLE public.recipes ENABLE ROW LEVEL SECURITY;
+
+-- Trigger for updated_at
+CREATE TRIGGER update_recipes_updated_at 
+BEFORE UPDATE ON recipes 
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- Body measurements table - New table for comprehensive body tracking
+CREATE TABLE public.body_measurements (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  clerk_user_id text NOT NULL,
+  date date NOT NULL,
+  weight numeric(5,2),
+  body_fat_percentage numeric(4,2),
+  neck numeric(5,2),
+  shoulders numeric(5,2),
+  chest numeric(5,2),
+  left_bicep numeric(5,2),
+  right_bicep numeric(5,2),
+  left_forearm numeric(5,2),
+  right_forearm numeric(5,2),
+  waist numeric(5,2),
+  hips numeric(5,2),
+  left_thigh numeric(5,2),
+  right_thigh numeric(5,2),
+  left_calf numeric(5,2),
+  right_calf numeric(5,2),
+  notes text,
+  photos text[], -- URLs to progress photos
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT body_measurements_pkey PRIMARY KEY (id),
+  CONSTRAINT body_measurements_unique_user_date UNIQUE (clerk_user_id, date)
+);
+
+-- Create indexes
+CREATE INDEX idx_body_measurements_user_date 
+ON public.body_measurements USING btree (clerk_user_id, date DESC);
+
+-- Enable RLS
+ALTER TABLE public.body_measurements ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies for all tables
 -- User nutrition profiles policies
 CREATE POLICY "Users can view own nutrition profile" ON public.user_nutrition_profiles
     FOR SELECT USING (auth.jwt() ->> 'sub' = clerk_user_id);
@@ -286,16 +425,16 @@ CREATE POLICY "Users can update own nutrition profile" ON public.user_nutrition_
 
 -- Foods policies (allow viewing all foods, but only modifying own)
 CREATE POLICY "Anyone can view public foods" ON public.foods
-    FOR SELECT USING (user_id IS NULL OR auth.jwt() ->> 'sub' = user_id);
+    FOR SELECT USING (user_id IS NULL OR auth.jwt() ->> 'sub' = user_id OR auth.jwt() ->> 'sub' = clerk_user_id);
 
 CREATE POLICY "Users can insert own foods" ON public.foods
-    FOR INSERT WITH CHECK (auth.jwt() ->> 'sub' = user_id);
+    FOR INSERT WITH CHECK (auth.jwt() ->> 'sub' = user_id OR auth.jwt() ->> 'sub' = clerk_user_id);
 
 CREATE POLICY "Users can update own foods" ON public.foods
-    FOR UPDATE USING (auth.jwt() ->> 'sub' = user_id);
+    FOR UPDATE USING (auth.jwt() ->> 'sub' = user_id OR auth.jwt() ->> 'sub' = clerk_user_id);
 
 CREATE POLICY "Users can delete own foods" ON public.foods
-    FOR DELETE USING (auth.jwt() ->> 'sub' = user_id);
+    FOR DELETE USING (auth.jwt() ->> 'sub' = user_id OR auth.jwt() ->> 'sub' = clerk_user_id);
 
 -- Weight entries policies
 CREATE POLICY "Users can view own weight entries" ON public.weight_entries
@@ -375,33 +514,76 @@ CREATE POLICY "Users can update own weekly check-ins" ON public.weekly_check_ins
 CREATE POLICY "Users can delete own weekly check-ins" ON public.weekly_check_ins
     FOR DELETE USING (auth.jwt() ->> 'sub' = clerk_user_id);
 
--- Create views for common queries
+-- Expenditure data policies
+CREATE POLICY "Users can view own expenditure data" ON public.expenditure_data
+    FOR SELECT USING (auth.jwt() ->> 'sub' = clerk_user_id);
 
--- View for daily nutrition summary with meals
-CREATE OR REPLACE VIEW daily_nutrition_summary AS
-SELECT 
-    n.clerk_user_id,
-    n.date,
-    n.calories as logged_calories,
-    n.protein as logged_protein,
-    n.carbs as logged_carbs,
-    n.fat as logged_fat,
-    n.fiber as logged_fiber,
-    COUNT(DISTINCT m.id) as meal_count,
-    json_agg(
-        json_build_object(
-            'meal_type', m.meal_type,
-            'food_name', f.name,
-            'amount_grams', m.amount_grams,
-            'calories', ROUND((f.calories_per_100g * m.amount_grams / 100)::numeric, 2)
-        ) ORDER BY m.logged_at
-    ) as meals
-FROM nutrition_logs n
-LEFT JOIN meals m ON n.id = m.nutrition_log_id
-LEFT JOIN foods f ON m.food_id = f.id
-GROUP BY n.id, n.clerk_user_id, n.date, n.calories, n.protein, n.carbs, n.fat, n.fiber;
+CREATE POLICY "Users can insert own expenditure data" ON public.expenditure_data
+    FOR INSERT WITH CHECK (auth.jwt() ->> 'sub' = clerk_user_id);
 
--- Function to calculate nutrition totals for a day
+CREATE POLICY "Users can update own expenditure data" ON public.expenditure_data
+    FOR UPDATE USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can delete own expenditure data" ON public.expenditure_data
+    FOR DELETE USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+-- Habit entries policies
+CREATE POLICY "Users can view own habit entries" ON public.habit_entries
+    FOR SELECT USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can insert own habit entries" ON public.habit_entries
+    FOR INSERT WITH CHECK (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can update own habit entries" ON public.habit_entries
+    FOR UPDATE USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can delete own habit entries" ON public.habit_entries
+    FOR DELETE USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+-- Recipes policies
+CREATE POLICY "Users can view own recipes and public recipes" ON public.recipes
+    FOR SELECT USING (auth.jwt() ->> 'sub' = clerk_user_id OR is_public = true);
+
+CREATE POLICY "Users can insert own recipes" ON public.recipes
+    FOR INSERT WITH CHECK (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can update own recipes" ON public.recipes
+    FOR UPDATE USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can delete own recipes" ON public.recipes
+    FOR DELETE USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+-- Body measurements policies
+CREATE POLICY "Users can view own body measurements" ON public.body_measurements
+    FOR SELECT USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can insert own body measurements" ON public.body_measurements
+    FOR INSERT WITH CHECK (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can update own body measurements" ON public.body_measurements
+    FOR UPDATE USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can delete own body measurements" ON public.body_measurements
+    FOR DELETE USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+-- Enhanced performance optimizations
+-- Full-text search indexes for foods
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX IF NOT EXISTS idx_foods_name_trgm 
+ON foods USING gin(name gin_trgm_ops);
+
+-- Index for user's custom foods
+CREATE INDEX IF NOT EXISTS idx_foods_user_enhanced 
+ON foods(clerk_user_id) 
+WHERE clerk_user_id IS NOT NULL;
+
+-- Note: Materialized view removed due to immutability issues with date extraction
+-- Use application-level queries with WHERE logged_at::date = $date instead
+
+-- Function removed since materialized view was removed due to immutability issues
+
+-- Enhanced function to calculate nutrition totals for a day
 CREATE OR REPLACE FUNCTION calculate_daily_nutrition(
     p_user_id text,
     p_date date
@@ -429,7 +611,7 @@ BEGIN
     FROM meals m
     JOIN foods f ON m.food_id = f.id
     WHERE m.clerk_user_id = p_user_id 
-    AND DATE(m.logged_at) = p_date;
+    AND m.logged_at::date = p_date;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -439,25 +621,25 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_date date;
     v_totals record;
+    v_user_id text;
 BEGIN
-    -- Determine the date based on the operation
+    -- Determine the date and user based on the operation
     IF TG_OP = 'DELETE' THEN
-        v_date := DATE(OLD.logged_at);
+        v_date := OLD.logged_at::date;
+        v_user_id := OLD.clerk_user_id;
     ELSE
-        v_date := DATE(NEW.logged_at);
+        v_date := NEW.logged_at::date;
+        v_user_id := NEW.clerk_user_id;
     END IF;
     
     -- Calculate new totals
-    SELECT * INTO v_totals FROM calculate_daily_nutrition(
-        COALESCE(NEW.clerk_user_id, OLD.clerk_user_id),
-        v_date
-    );
+    SELECT * INTO v_totals FROM calculate_daily_nutrition(v_user_id, v_date);
     
     -- Update or insert nutrition log
     INSERT INTO nutrition_logs (
         clerk_user_id, date, calories, protein, carbs, fat, fiber, sugar, saturated_fat, sodium
     ) VALUES (
-        COALESCE(NEW.clerk_user_id, OLD.clerk_user_id),
+        v_user_id,
         v_date,
         v_totals.total_calories,
         v_totals.total_protein,
@@ -479,7 +661,7 @@ BEGIN
         sodium = EXCLUDED.sodium,
         updated_at = now();
     
-    RETURN NEW;
+    RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -508,16 +690,3 @@ CREATE TRIGGER update_quick_add_on_meal_insert
 AFTER INSERT ON meals
 FOR EACH ROW
 EXECUTE FUNCTION update_quick_add_frequency();
-
--- Insert some sample public foods (optional, can be removed in production)
-INSERT INTO public.foods (name, brand, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, is_verified) VALUES
-('Chicken Breast (Cooked)', 'Generic', 165, 31, 0, 3.6, 0, true),
-('Brown Rice (Cooked)', 'Generic', 112, 2.6, 23.5, 0.9, 1.8, true),
-('Banana', 'Generic', 89, 1.1, 22.8, 0.3, 2.6, true),
-('Greek Yogurt (Plain, Non-fat)', 'Generic', 59, 10.2, 3.6, 0.4, 0, true),
-('Almonds', 'Generic', 579, 21.2, 21.6, 49.9, 12.5, true),
-('Sweet Potato (Cooked)', 'Generic', 86, 1.6, 20.1, 0.1, 3, true),
-('Olive Oil', 'Generic', 884, 0, 0, 100, 0, true),
-('Eggs (Whole)', 'Generic', 155, 13, 1.1, 10.6, 0, true),
-('Oatmeal (Dry)', 'Generic', 389, 16.9, 66.3, 6.9, 10.6, true),
-('Broccoli (Cooked)', 'Generic', 35, 2.4, 7.2, 0.4, 3.3, true);
