@@ -1,26 +1,37 @@
-import React, { Suspense, useEffect } from "react";
+import React, { Suspense, useEffect, lazy } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ClerkProvider, useAuth } from "@clerk/clerk-react";
 import { SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
+import { DashboardSkeleton } from "./components/ui/SkeletonLoader";
 
-// Pages
+// Critical pages loaded immediately
 import SignInPage from "./pages/SignInPage";
 import DashboardPage from "./pages/DashboardPage";
-import FoodDiaryPage from "./pages/FoodDiaryPage";
 import AddFoodPage from "./pages/AddFoodPage";
-import ProgressPage from "./pages/ProgressPage";
-import CoachingPage from "./pages/CoachingPage";
-import FoodDatabasePage from "./pages/FoodDatabasePage";
-import SettingsPage from "./pages/SettingsPage";
 import OnboardingPage from "./pages/OnboardingPage";
-import WeeklyCheckInPage from "./pages/WeeklyCheckInPage";
-import AnalyticsPage from "./pages/AnalyticsPage";
-import RecipeBuilderPage from "./pages/RecipeBuilderPage";
-import MeasurementsPage from "./pages/MeasurementsPage";
+
+// Lazy load secondary pages
+const FoodDiaryPage = lazy(() => import("./pages/FoodDiaryPage"));
+const ProgressPage = lazy(() => import("./pages/ProgressPage"));
+const CoachingPage = lazy(() => import("./pages/CoachingPage"));
+const FoodDatabasePage = lazy(() => import("./pages/FoodDatabasePage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const WeeklyCheckInPage = lazy(() => import("./pages/WeeklyCheckInPage"));
+const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
+const RecipeBuilderPage = lazy(() => import("./pages/RecipeBuilderPage"));
+const MeasurementsPage = lazy(() => import("./pages/MeasurementsPage"));
+const ExpenditurePage = lazy(() => import("./pages/ExpenditurePage"));
+const NutritionDashboardPage = lazy(() => import("./pages/NutritionDashboardPage"));
+const HabitDashboardPage = lazy(() => import("./pages/HabitDashboardPage"));
+const PlateCoachPage = lazy(() => import("./pages/PlateCoachPage"));
+const DataExportPage = lazy(() => import("./pages/DataExportPage"));
+const MoreMenuPage = lazy(() => import("./pages/MoreMenuPage"));
 
 // Utils and Components
 import { initializeDatabase } from "./utils/database";
 import Footer from "./components/Footer";
+import BottomNavigation from "./components/BottomNavigation";
+import { FloatingActionButton } from "./components/FloatingActionButton";
 import { DateProvider } from "./contexts/DateContext";
 import { ProfileGuard } from "./components/ProfileGuard";
 
@@ -48,8 +59,16 @@ const App: React.FC = () => {
     <ClerkProvider publishableKey={clerkPubKey}>
       <DateProvider>
         <DatabaseInitializer>
-          <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
-            <Router>
+          <Router>
+            <Suspense fallback={
+              <div className="min-h-screen bg-gray-900">
+                <div className="w-full pt-20 pb-24">
+                  <div className="max-w-4xl mx-auto px-4">
+                    <DashboardSkeleton />
+                  </div>
+                </div>
+              </div>
+            }>
               <Routes>
                 {/* Public routes */}
                 <Route path="/sign-in" element={<SignInPage />} />
@@ -248,10 +267,119 @@ const App: React.FC = () => {
                     </>
                   }
                 />
+                <Route
+                  path="/expenditure"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <ExpenditurePage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/nutrition-dashboard"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <NutritionDashboardPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/habits"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <HabitDashboardPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/plate-coach"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <PlateCoachPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/data-export"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <DataExportPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/more"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <MoreMenuPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <>
+                      <SignedIn>
+                        <ProfileGuard requireComplete={true}>
+                          <SettingsPage />
+                        </ProfileGuard>
+                      </SignedIn>
+                      <SignedOut>
+                        <RedirectToSignIn />
+                      </SignedOut>
+                    </>
+                  }
+                />
               </Routes>
               <Footer />
-            </Router>
-          </Suspense>
+              <BottomNavigation />
+              <SignedIn>
+                <FloatingActionButton />
+              </SignedIn>
+            </Suspense>
+          </Router>
         </DatabaseInitializer>
       </DateProvider>
     </ClerkProvider>

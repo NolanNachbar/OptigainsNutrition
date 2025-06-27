@@ -1,13 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
-import { Food, MealType, UserNutritionProfile } from '../utils/types';
+import { Food, MealType, UserNutritionProfile, Meal } from '../utils/types';
 import Actionbar from '../components/Actionbar';
 import BarcodeScanner from '../components/BarcodeScanner';
-import { searchFoods as searchDBFoods, createFood, getQuickAddFoods, createMeal as addMeal, getUserProfile } from '../utils/database';
+import { searchFoods as searchDBFoods, createFood, getQuickAddFoods, createMeal as addMeal, getUserProfile, getMealsByDate } from '../utils/database';
 import { searchFoods, searchFoodByBarcode } from '../utils/foodSearchAPI';
 import { format } from 'date-fns';
 import { getDefaultPortions } from '../utils/unitConversions';
+import { 
+  getSmartPortionSize, 
+  updatePortionMemory, 
+  loadPortionMemory, 
+  savePortionMemory,
+  getFrequentFoods,
+  generateQuickAddSuggestions,
+  getMealCopySuggestions,
+  PortionMemory 
+} from '../utils/loggingEfficiency';
 
 const AddFoodPage: React.FC = () => {
   const navigate = useNavigate();
@@ -25,6 +35,13 @@ const AddFoodPage: React.FC = () => {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [userProfile, setUserProfile] = useState<UserNutritionProfile | null>(null);
   
+  // New states for enhanced features
+  const [portionMemory, setPortionMemory] = useState<PortionMemory[]>([]);
+  const [frequentFoods, setFrequentFoods] = useState<Food[]>([]);
+  const [quickAddSuggestions, setQuickAddSuggestions] = useState<any[]>([]);
+  const [copySuggestions, setCopySuggestions] = useState<any[]>([]);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  
   const foodUnit = userProfile?.food_weight_unit || 'metric';  // Default to metric for food
 
   // New food form state
@@ -40,9 +57,54 @@ const AddFoodPage: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchRecentFoods();
-    fetchUserProfile();
-  }, [user]);
+    if (user) {
+      fetchRecentFoods();
+      fetchUserProfile();
+      loadEnhancedData();
+    }
+  }, [user, mealType]);
+
+  const loadEnhancedData = async () => {
+    if (!user) return;
+    
+    // Load portion memory
+    const memory = loadPortionMemory(user.id);
+    setPortionMemory(memory);
+    
+    // Load recent meals for pattern analysis
+    const allRecentMeals: Meal[] = [];
+    
+    // Get meals from past 30 days for frequency analysis
+    for (let i = 0; i < 30; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dayMeals = await getMealsByDate(user.id, format(date, 'yyyy-MM-dd'));
+      allRecentMeals.push(...dayMeals);
+    }
+    
+    // Calculate frequent foods
+    const frequent = getFrequentFoods(allRecentMeals, mealType, 10);
+    setFrequentFoods(frequent.map(f => f.food));
+    
+    // Generate quick-add suggestions
+    const now = new Date();
+    const suggestions = generateQuickAddSuggestions(
+      mealType,
+      now.getHours(),
+      now.getDay(),
+      allRecentMeals,
+      frequent
+    );
+    setQuickAddSuggestions(suggestions);
+    
+    // Get meal copy suggestions
+    const copyOpts = getMealCopySuggestions(
+      format(now, 'yyyy-MM-dd'),
+      mealType,
+      allRecentMeals
+    );
+    setCopySuggestions(copyOpts);
+  };
   
   const fetchUserProfile = async () => {
     if (!user) return;
@@ -137,8 +199,19 @@ const AddFoodPage: React.FC = () => {
         logged_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss")
       };
       
-      const success = await addMeal(meal);
-      if (success) {
+      const createdMeal = await addMeal(meal);
+      if (createdMeal) {
+        // Update portion memory
+        const mealWithFood = {
+          ...meal,
+          food: selectedFood,
+          id: 'temp',
+          food_id: foodId
+        } as Meal;
+        
+        const updatedMemory = updatePortionMemory(mealWithFood, portionMemory);
+        savePortionMemory(user.id, updatedMemory);
+        
         navigate('/diary');
       } else {
         alert('Failed to add food. Please try again.');
@@ -405,7 +478,35 @@ const AddFoodPage: React.FC = () => {
                 <span className="py-2">{foodUnit === 'imperial' ? 'oz' : 'grams'}</span>
               </div>
               <div className="flex gap-2 flex-wrap">
-                {getDefaultPortions(foodUnit).slice(0, 4).map((portion) => (
+                {/* Smart portion suggestion */}
+                {selectedFood.id && (() => {
+                  const smartPortion = getSmartPortionSize(
+                    selectedFood.id,
+                    mealType,
+                    portionMemory,
+                    100
+                  );
+                  if (smartPortion.confidence !== 'low') {
+                    return (
+                      <button
+                        onClick={() => setAmount(
+                          (smartPortion.amount / (foodUnit === 'imperial' ? 28.35 : 1)).toFixed(1)
+                        )}
+                        className={`text-xs px-3 py-1 rounded-lg ${
+                          smartPortion.confidence === 'high' 
+                            ? 'bg-blue-600 hover:bg-blue-700' 
+                            : 'bg-blue-600/50 hover:bg-blue-700/50'
+                        }`}
+                      >
+                        Last: {smartPortion.amount}g
+                      </button>
+                    );
+                  }
+                  return null;
+                })()}
+                
+                {/* Default portions */}
+                {getDefaultPortions(foodUnit).slice(0, 3).map((portion) => (
                   <button
                     key={portion.label}
                     onClick={() => setAmount((portion.value / (foodUnit === 'imperial' ? 28.35 : 1)).toFixed(1))}
@@ -452,6 +553,83 @@ const AddFoodPage: React.FC = () => {
           </div>
         )}
 
+        {/* Quick Add Suggestions */}
+        {quickAddSuggestions.length > 0 && !searchQuery && (
+          <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-semibold">Quick Add</h3>
+              <button 
+                onClick={() => setShowQuickAdd(!showQuickAdd)}
+                className="text-sm text-blue-400 hover:text-blue-300"
+              >
+                {showQuickAdd ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {showQuickAdd && (
+              <div className="space-y-2">
+                {quickAddSuggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setSelectedFood(suggestion.food);
+                      setAmount((suggestion.suggestedAmount / (foodUnit === 'imperial' ? 28.35 : 1)).toFixed(1));
+                    }}
+                    className="w-full text-left p-3 hover:bg-gray-700 rounded-lg border border-gray-700"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-medium">{suggestion.food.name}</div>
+                        <div className="text-xs text-gray-400">{suggestion.reason}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-medium">{suggestion.suggestedAmount}g</div>
+                        <div className={`text-xs px-2 py-1 rounded mt-1 ${
+                          suggestion.confidence === 'high' ? 'bg-green-900/50 text-green-400' :
+                          suggestion.confidence === 'medium' ? 'bg-yellow-900/50 text-yellow-400' :
+                          'bg-gray-700 text-gray-400'
+                        }`}>
+                          {suggestion.confidence}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Copy Previous Meals */}
+        {copySuggestions.length > 0 && !searchQuery && (
+          <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-4">
+            <h3 className="font-semibold mb-3">Copy from Previous Days</h3>
+            <div className="space-y-2">
+              {copySuggestions.map((suggestion, index) => (
+                <div key={index} className="border border-gray-700 rounded-lg p-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">{format(new Date(suggestion.date), 'EEEE, MMM d')}</span>
+                    <span className="text-xs text-gray-400">{Math.round(suggestion.similarity * 100)}% match</span>
+                  </div>
+                  <div className="space-y-1">
+                    {suggestion.meals.map((meal: Meal) => (
+                      <button
+                        key={meal.id}
+                        onClick={() => {
+                          setSelectedFood(meal.food!);
+                          setAmount((meal.amount_grams / (foodUnit === 'imperial' ? 28.35 : 1)).toFixed(1));
+                        }}
+                        className="w-full text-left p-2 hover:bg-gray-700 rounded text-sm"
+                      >
+                        {meal.food?.name} • {meal.amount_grams}g
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Search Results */}
         {searchResults.length > 0 && (
           <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-4">
@@ -471,17 +649,28 @@ const AddFoodPage: React.FC = () => {
           </div>
         )}
 
-        {/* Recent Foods */}
+        {/* Frequent Foods */}
         <div className="bg-gray-800 rounded-lg shadow-md p-4">
-          <h3 className="font-semibold mb-3">Recent Foods</h3>
-          {recentFoods.map(food => (
+          <h3 className="font-semibold mb-3">
+            {frequentFoods.length > 0 ? `Frequent ${mealType} Foods` : 'Recent Foods'}
+          </h3>
+          {(frequentFoods.length > 0 ? frequentFoods : recentFoods).map(food => (
             <button
               key={food.id}
-              onClick={() => setSelectedFood(food)}
-              className="w-full text-left p-3 hover:bg-gray-50 border-b last:border-b-0"
+              onClick={() => {
+                setSelectedFood(food);
+                // Auto-set portion from memory if available
+                if (food.id) {
+                  const smartPortion = getSmartPortionSize(food.id, mealType, portionMemory, 100);
+                  if (smartPortion.confidence !== 'low') {
+                    setAmount((smartPortion.amount / (foodUnit === 'imperial' ? 28.35 : 1)).toFixed(1));
+                  }
+                }
+              }}
+              className="w-full text-left p-3 hover:bg-gray-700 border-b border-gray-700 last:border-b-0"
             >
               <div className="font-medium">{food.name}</div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-400">
                 {food.brand} • {food.calories_per_100g} cal per 100g
               </div>
             </button>

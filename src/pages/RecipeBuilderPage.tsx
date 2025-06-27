@@ -15,10 +15,14 @@ const RecipeBuilderPage: React.FC = () => {
   const [recipeName, setRecipeName] = useState('');
   const [description, setDescription] = useState('');
   const [servings, setServings] = useState(1);
+  const [originalServings, setOriginalServings] = useState(1);
   const [prepTime, setPrepTime] = useState('');
   const [cookTime, setCookTime] = useState('');
   const [instructions, setInstructions] = useState('');
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([]);
+  const [customServingSize, setCustomServingSize] = useState('');
+  const [servingUnit, setServingUnit] = useState('serving');
+  const [totalWeight, setTotalWeight] = useState(0);
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,8 +32,10 @@ const RecipeBuilderPage: React.FC = () => {
   const [amount, setAmount] = useState('100');
   
   // UI state
-  const [activeTab, setActiveTab] = useState<'details' | 'ingredients' | 'instructions'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'ingredients' | 'instructions' | 'nutrition'>('details');
   const [saving, setSaving] = useState(false);
+  const [scaleMode, setScaleMode] = useState<'servings' | 'weight' | 'custom'>('servings');
+  const [targetServings, setTargetServings] = useState(1);
 
   // Search for foods
   const handleSearch = async () => {
@@ -75,9 +81,36 @@ const RecipeBuilderPage: React.FC = () => {
     setIngredients(updated);
   };
 
-  // Calculate total nutrition
-  const calculateNutrition = () => {
-    const totals = ingredients.reduce((acc, ing) => {
+
+  // const nutrition = calculateNutrition(); // Replaced by scaledNutrition
+  
+  // Calculate scaling factor
+  const getScalingFactor = () => {
+    switch (scaleMode) {
+      case 'servings':
+        return targetServings / originalServings;
+      case 'weight':
+        const currentWeight = ingredients.reduce((sum, ing) => sum + ing.amount_grams, 0);
+        return totalWeight > 0 ? totalWeight / currentWeight : 1;
+      case 'custom':
+        return parseFloat(customServingSize) || 1;
+      default:
+        return 1;
+    }
+  };
+  
+  const scalingFactor = getScalingFactor();
+  
+  // Scale ingredients
+  const scaleIngredient = (ingredient: RecipeIngredient) => ({
+    ...ingredient,
+    amount_grams: ingredient.amount_grams * scalingFactor
+  });
+  
+  // Calculate scaled nutrition
+  const calculateScaledNutrition = () => {
+    const scaledIngredients = ingredients.map(scaleIngredient);
+    const totals = scaledIngredients.reduce((acc, ing) => {
       if (!ing.food) return acc;
       const multiplier = ing.amount_grams / 100;
       
@@ -90,19 +123,19 @@ const RecipeBuilderPage: React.FC = () => {
       };
     }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
 
-    // Per serving
+    const targetServingCount = scaleMode === 'servings' ? targetServings : servings;
     const perServing = {
-      calories: totals.calories / servings,
-      protein: totals.protein / servings,
-      carbs: totals.carbs / servings,
-      fat: totals.fat / servings,
-      fiber: totals.fiber / servings
+      calories: totals.calories / targetServingCount,
+      protein: totals.protein / targetServingCount,
+      carbs: totals.carbs / targetServingCount,
+      fat: totals.fat / targetServingCount,
+      fiber: totals.fiber / targetServingCount
     };
 
     return { totals, perServing };
   };
-
-  const nutrition = calculateNutrition();
+  
+  const scaledNutrition = calculateScaledNutrition();
 
   // Save recipe
   const handleSaveRecipe = async () => {
@@ -137,8 +170,20 @@ const RecipeBuilderPage: React.FC = () => {
   const tabs = [
     { id: 'details' as const, label: 'Recipe Details' },
     { id: 'ingredients' as const, label: 'Ingredients' },
-    { id: 'instructions' as const, label: 'Instructions' }
+    { id: 'instructions' as const, label: 'Instructions' },
+    { id: 'nutrition' as const, label: 'Nutrition & Scaling' }
   ];
+  
+  // Set original servings when servings is first set
+  const handleServingsChange = (newServings: number) => {
+    if (originalServings === 1 && newServings > 1) {
+      setOriginalServings(newServings);
+    }
+    setServings(newServings);
+    if (scaleMode === 'servings') {
+      setTargetServings(newServings);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -157,25 +202,28 @@ const RecipeBuilderPage: React.FC = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-500">
-                  {Math.round(nutrition.perServing.calories)}
+                  {Math.round(scaledNutrition.perServing.calories)}
                 </div>
                 <div className="text-sm text-gray-400">Cal/serving</div>
+                {scalingFactor !== 1 && (
+                  <div className="text-xs text-blue-400">Scaled {scalingFactor.toFixed(1)}x</div>
+                )}
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-500">
-                  {Math.round(nutrition.perServing.protein)}g
+                  {Math.round(scaledNutrition.perServing.protein)}g
                 </div>
                 <div className="text-sm text-gray-400">Protein</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-orange-500">
-                  {Math.round(nutrition.perServing.carbs)}g
+                  {Math.round(scaledNutrition.perServing.carbs)}g
                 </div>
                 <div className="text-sm text-gray-400">Carbs</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-500">
-                  {Math.round(nutrition.perServing.fat)}g
+                  {Math.round(scaledNutrition.perServing.fat)}g
                 </div>
                 <div className="text-sm text-gray-400">Fat</div>
               </div>
@@ -230,7 +278,7 @@ const RecipeBuilderPage: React.FC = () => {
                     <input
                       type="number"
                       value={servings}
-                      onChange={(e) => setServings(parseInt(e.target.value) || 1)}
+                      onChange={(e) => handleServingsChange(parseInt(e.target.value) || 1)}
                       min="1"
                       className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg"
                     />
@@ -376,6 +424,201 @@ const RecipeBuilderPage: React.FC = () => {
                 placeholder="1. Preheat oven to 350°F...&#10;2. Mix ingredients...&#10;3. Bake for 30 minutes..."
               />
             </Card>
+          )}
+
+          {/* Nutrition & Scaling Tab */}
+          {activeTab === 'nutrition' && (
+            <div className="space-y-6">
+              {/* Scaling Controls */}
+              <Card variant="elevated">
+                <h2 className="text-xl font-semibold mb-6">Recipe Scaling</h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <button
+                    onClick={() => setScaleMode('servings')}
+                    className={`p-4 rounded-lg border-2 transition-all ${
+                      scaleMode === 'servings'
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-gray-600 hover:border-gray-500'
+                    }`}
+                  >
+                    <div className="font-medium">Scale by Servings</div>
+                    <div className="text-sm text-gray-400 mt-1">Adjust serving count</div>
+                  </button>
+                  
+                  <button
+                    onClick={() => setScaleMode('weight')}
+                    className={`p-4 rounded-lg border-2 transition-all ${
+                      scaleMode === 'weight'
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-gray-600 hover:border-gray-500'
+                    }`}
+                  >
+                    <div className="font-medium">Scale by Weight</div>
+                    <div className="text-sm text-gray-400 mt-1">Target total weight</div>
+                  </button>
+                  
+                  <button
+                    onClick={() => setScaleMode('custom')}
+                    className={`p-4 rounded-lg border-2 transition-all ${
+                      scaleMode === 'custom'
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-gray-600 hover:border-gray-500'
+                    }`}
+                  >
+                    <div className="font-medium">Custom Scale</div>
+                    <div className="text-sm text-gray-400 mt-1">Custom multiplier</div>
+                  </button>
+                </div>
+
+                {scaleMode === 'servings' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Target Servings</label>
+                    <input
+                      type="number"
+                      value={targetServings}
+                      onChange={(e) => setTargetServings(parseInt(e.target.value) || 1)}
+                      min="1"
+                      className="w-full max-w-xs p-3 bg-gray-800 border border-gray-700 rounded-lg"
+                    />
+                    <div className="text-sm text-gray-400 mt-2">
+                      Scaling factor: {(targetServings / originalServings).toFixed(2)}x
+                    </div>
+                  </div>
+                )}
+
+                {scaleMode === 'weight' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Target Total Weight (g)</label>
+                    <input
+                      type="number"
+                      value={totalWeight}
+                      onChange={(e) => setTotalWeight(parseInt(e.target.value) || 0)}
+                      min="0"
+                      className="w-full max-w-xs p-3 bg-gray-800 border border-gray-700 rounded-lg"
+                    />
+                    <div className="text-sm text-gray-400 mt-2">
+                      Current weight: {ingredients.reduce((sum, ing) => sum + ing.amount_grams, 0)}g
+                    </div>
+                  </div>
+                )}
+
+                {scaleMode === 'custom' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Custom Serving Size</label>
+                    <div className="flex gap-2 max-w-md">
+                      <input
+                        type="number"
+                        value={customServingSize}
+                        onChange={(e) => setCustomServingSize(e.target.value)}
+                        step="0.1"
+                        className="flex-1 p-3 bg-gray-800 border border-gray-700 rounded-lg"
+                        placeholder="1.5"
+                      />
+                      <select
+                        value={servingUnit}
+                        onChange={(e) => setServingUnit(e.target.value)}
+                        className="px-3 bg-gray-800 border border-gray-700 rounded-lg"
+                      >
+                        <option value="serving">serving</option>
+                        <option value="cup">cup</option>
+                        <option value="slice">slice</option>
+                        <option value="piece">piece</option>
+                        <option value="scoop">scoop</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </Card>
+
+              {/* Scaled Ingredients */}
+              {ingredients.length > 0 && scalingFactor !== 1 && (
+                <Card variant="elevated">
+                  <h2 className="text-xl font-semibold mb-6">Scaled Ingredients</h2>
+                  
+                  <div className="space-y-3">
+                    {ingredients.map((ingredient, index) => {
+                      const scaled = scaleIngredient(ingredient);
+                      return (
+                        <div key={index} className="flex justify-between items-center p-3 bg-gray-800/50 rounded-lg">
+                          <div>
+                            <div className="font-medium">{ingredient.food?.name}</div>
+                            <div className="text-sm text-gray-400">
+                              Original: {ingredient.amount_grams}g
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-medium text-blue-400">{Math.round(scaled.amount_grams)}g</div>
+                            <div className="text-sm text-gray-400">
+                              {Math.round((ingredient.food?.calories_per_100g || 0) * scaled.amount_grams / 100)} cal
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
+
+              {/* Detailed Nutrition */}
+              <Card variant="elevated">
+                <h2 className="text-xl font-semibold mb-6">Detailed Nutrition</h2>
+                
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="font-medium mb-4">Per Serving</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Calories</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.perServing.calories)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Protein</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.perServing.protein)}g</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Carbohydrates</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.perServing.carbs)}g</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Fat</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.perServing.fat)}g</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Fiber</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.perServing.fiber)}g</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h3 className="font-medium mb-4">Total Recipe</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Calories</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.totals.calories)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Protein</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.totals.protein)}g</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Carbohydrates</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.totals.carbs)}g</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Fat</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.totals.fat)}g</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Fiber</span>
+                        <span className="font-medium">{Math.round(scaledNutrition.totals.fiber)}g</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
           )}
 
           {/* Action Buttons */}

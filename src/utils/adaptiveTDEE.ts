@@ -1,231 +1,231 @@
-// Adaptive TDEE Algorithm with Trend Weight Calculation
-// Based on exponentially weighted moving averages and actual energy balance
+// Adaptive TDEE Algorithm with MacroFactor-style adherence-neutral calculations
+// Uses advanced weight trend modeling and energy balance equations
 
-import { WeightEntry, NutritionLog } from './types';
+import { WeightEntry, NutritionLog, Macros, GoalType } from './types';
+import { 
+  calculateWeightTrend, 
+  analyzeWeightTrend, 
+  calculateAdherenceNeutralTDEE as calculateTDEEFromTrend,
+  getTDEEConfidence 
+} from './weightTrend';
+import { calculateAdherenceMetrics } from './adherenceScoring';
+import { 
+  BiologicalData, 
+  ActivityData, 
+  calculateEnergyComponents,
+  EnergyComponents 
+} from './energyExpenditure';
 
-interface TDEEData {
+export interface TDEEData {
   currentTDEE: number;
   confidence: number; // 0-100
+  confidenceLevel: 'low' | 'medium' | 'high';
   trendWeight: number;
   weightTrend: 'gaining' | 'losing' | 'maintaining';
-  weeklyChange: number; // kg per week
+  weeklyChangeRate: number; // % body weight per week
+  dailyChangeRate: number; // kg per day
   adherenceScore: number; // 0-100
+  energyComponents?: EnergyComponents;
+  dataQuality: 'low' | 'medium' | 'high';
   lastUpdated: string;
+  methodology: 'initial' | 'adaptive' | 'hybrid';
 }
 
-// Calculate exponentially weighted moving average for trend weight
-export const calculateTrendWeight = (
-  weights: WeightEntry[], 
-  smoothingFactor: number = 0.1
-): number => {
-  if (weights.length === 0) return 0;
-  
-  // Sort by date ascending
-  const sortedWeights = [...weights].sort((a, b) => 
-    new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
-  
-  // Initialize with first weight
-  let trend = sortedWeights[0].weight;
-  
-  // Apply exponential smoothing
-  for (let i = 1; i < sortedWeights.length; i++) {
-    trend = trend + smoothingFactor * (sortedWeights[i].weight - trend);
-  }
-  
-  return Math.round(trend * 10) / 10;
+// Export the calculateTrendWeight function directly for backwards compatibility
+export const calculateTrendWeight = (weights: WeightEntry[]): number => {
+  const trendPoints = calculateWeightTrend(weights);
+  return trendPoints.length > 0 ? trendPoints[trendPoints.length - 1].trendWeight : 0;
 };
 
-// Calculate rate of weight change (kg per week)
-export const calculateWeightChangeRate = (
-  weights: WeightEntry[],
-  days: number = 14
-): number => {
-  if (weights.length < 2) return 0;
-  
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - days);
-  
-  const recentWeights = weights
-    .filter(w => new Date(w.date) >= cutoffDate)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  
-  if (recentWeights.length < 2) return 0;
-  
-  const firstWeight = calculateTrendWeight(recentWeights.slice(0, 3));
-  const lastWeight = calculateTrendWeight(recentWeights.slice(-3));
-  const daysDiff = Math.abs(
-    (new Date(recentWeights[recentWeights.length - 1].date).getTime() - 
-     new Date(recentWeights[0].date).getTime()) / (1000 * 60 * 60 * 24)
-  );
-  
-  if (daysDiff === 0) return 0;
-  
-  const changePerDay = (lastWeight - firstWeight) / daysDiff;
-  return changePerDay * 7; // Convert to per week
-};
-
-// Calculate adaptive TDEE based on actual results
+// Calculate MacroFactor-style adaptive TDEE using adherence-neutral approach
 export const calculateAdaptiveTDEE = (
   weights: WeightEntry[],
   nutritionLogs: NutritionLog[],
-  initialTDEE: number,
+  targetMacros: Macros,
+  biologicalData?: BiologicalData,
+  activityData?: ActivityData,
   minDataDays: number = 7
 ): TDEEData => {
-  // Need at least minDataDays of data
+  // Calculate initial TDEE from macros if no biological data
+  const initialTDEE = targetMacros.calories;
+  
+  // Need minimum data for calculations
   const validLogs = nutritionLogs.filter(log => log.calories > 0);
   if (weights.length < 2 || validLogs.length < minDataDays) {
     return {
       currentTDEE: initialTDEE,
       confidence: 0,
+      confidenceLevel: 'low',
       trendWeight: weights[0]?.weight || 0,
       weightTrend: 'maintaining',
-      weeklyChange: 0,
+      weeklyChangeRate: 0,
+      dailyChangeRate: 0,
       adherenceScore: 0,
-      lastUpdated: new Date().toISOString()
+      dataQuality: 'low',
+      lastUpdated: new Date().toISOString(),
+      methodology: 'initial'
     };
   }
   
-  // Calculate trend weight and rate of change
-  const trendWeight = calculateTrendWeight(weights);
-  const weeklyChange = calculateWeightChangeRate(weights);
+  // Step 1: Calculate weight trend using exponential smoothing
+  const trendPoints = calculateWeightTrend(weights);
+  const trendAnalysis = analyzeWeightTrend(trendPoints);
   
-  // Determine weight trend
-  let weightTrend: 'gaining' | 'losing' | 'maintaining';
-  if (weeklyChange > 0.1) weightTrend = 'gaining';
-  else if (weeklyChange < -0.1) weightTrend = 'losing';
-  else weightTrend = 'maintaining';
-  
-  // Calculate average intake over recent period
-  const recentDays = 14;
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - recentDays);
-  
+  // Step 2: Calculate average intake (adherence-neutral - uses actual intake, not targets)
+  const recentDays = Math.min(14, validLogs.length);
   const recentLogs = validLogs
-    .filter(log => new Date(log.date) >= cutoffDate)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, recentDays);
   
-  if (recentLogs.length < minDataDays) {
-    return {
-      currentTDEE: initialTDEE,
-      confidence: 10,
-      trendWeight,
-      weightTrend,
-      weeklyChange,
-      adherenceScore: (validLogs.length / minDataDays) * 100,
-      lastUpdated: new Date().toISOString()
-    };
+  const avgDailyIntake = recentLogs.reduce((sum, log) => sum + log.calories, 0) / recentLogs.length;
+  
+  // Step 3: Calculate weight change over period
+  const oldestLog = recentLogs[recentLogs.length - 1];
+  const newestLog = recentLogs[0];
+  const daysElapsed = Math.max(1, 
+    (new Date(newestLog.date).getTime() - new Date(oldestLog.date).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  
+  // Get weight change from trend analysis
+  const weightChangeKg = trendAnalysis.dailyChangeRate * daysElapsed;
+  
+  // Step 4: Calculate adherence-neutral TDEE using energy balance
+  const adaptiveTDEE = calculateTDEEFromTrend(avgDailyIntake, weightChangeKg, daysElapsed);
+  
+  // Step 5: Calculate confidence based on multiple factors
+  const weightEntries = weights.filter(w => {
+    const date = new Date(w.date);
+    return date >= new Date(oldestLog.date) && date <= new Date(newestLog.date);
+  }).length;
+  
+  const tdeeConfidence = getTDEEConfidence(
+    recentLogs.length,
+    daysElapsed,
+    weightEntries,
+    trendAnalysis.volatility
+  );
+  
+  // Step 6: Calculate adherence metrics
+  const adherenceMetrics = calculateAdherenceMetrics(recentLogs, targetMacros, daysElapsed);
+  
+  // Step 7: Calculate energy components if biological data available
+  let energyComponents: EnergyComponents | undefined;
+  if (biologicalData && activityData) {
+    energyComponents = calculateEnergyComponents(
+      biologicalData,
+      activityData,
+      avgDailyIntake,
+      adaptiveTDEE
+    );
   }
   
-  // Calculate average daily intake
-  const avgCalories = recentLogs.reduce((sum, log) => sum + log.calories, 0) / recentLogs.length;
+  // Step 8: Determine methodology used
+  let methodology: 'initial' | 'adaptive' | 'hybrid' = 'adaptive';
+  if (tdeeConfidence.level === 'low') {
+    methodology = 'initial';
+  } else if (energyComponents) {
+    methodology = 'hybrid';
+  }
   
-  // Calculate TDEE based on energy balance
-  // 1 kg of body weight ≈ 7700 calories
-  const dailyChange = weeklyChange / 7; // kg per day
-  const calorieAdjustment = dailyChange * 7700; // calories per day
-  
-  // TDEE = Average Intake - Calorie Surplus/Deficit
-  const calculatedTDEE = Math.round(avgCalories - calorieAdjustment);
-  
-  // Smooth the TDEE change to avoid dramatic swings
-  const tdeeChange = calculatedTDEE - initialTDEE;
-  const maxChange = initialTDEE * 0.2; // Max 20% change at once
+  // Step 9: Apply smoothing to prevent dramatic swings
+  const maxChange = initialTDEE * 0.15; // Max 15% change
+  const tdeeChange = adaptiveTDEE - initialTDEE;
   const smoothedTDEE = initialTDEE + Math.max(-maxChange, Math.min(maxChange, tdeeChange));
-  
-  // Calculate confidence based on data quality
-  const dataPoints = recentLogs.length;
-  const consistency = Math.min(100, (dataPoints / recentDays) * 100);
-  const weightDataPoints = weights.filter(w => new Date(w.date) >= cutoffDate).length;
-  const weightConsistency = Math.min(100, (weightDataPoints / recentDays) * 100);
-  
-  const confidence = Math.round((consistency + weightConsistency) / 2);
-  
-  // Calculate adherence score
-  const targetCalories = initialTDEE; // Use initial as baseline
-  const adherenceScores = recentLogs.map(log => {
-    const diff = Math.abs(log.calories - targetCalories);
-    const percentDiff = (diff / targetCalories) * 100;
-    return Math.max(0, 100 - percentDiff);
-  });
-  const adherenceScore = Math.round(
-    adherenceScores.reduce((sum, score) => sum + score, 0) / adherenceScores.length
-  );
   
   return {
     currentTDEE: Math.round(smoothedTDEE),
-    confidence,
-    trendWeight,
-    weightTrend,
-    weeklyChange: Math.round(weeklyChange * 100) / 100,
-    adherenceScore,
-    lastUpdated: new Date().toISOString()
+    confidence: Math.round(tdeeConfidence.score * 100),
+    confidenceLevel: tdeeConfidence.level,
+    trendWeight: trendAnalysis.currentTrendWeight,
+    weightTrend: trendAnalysis.trendDirection,
+    weeklyChangeRate: trendAnalysis.weeklyChangeRate,
+    dailyChangeRate: trendAnalysis.dailyChangeRate,
+    adherenceScore: adherenceMetrics.overallScore,
+    energyComponents,
+    dataQuality: trendAnalysis.dataQuality,
+    lastUpdated: new Date().toISOString(),
+    methodology
   };
 };
 
-// Get TDEE adjustment recommendations
+// Import goal adjustment utilities
+import { 
+  getGoalConstraints, 
+  generateCalorieAdjustment,
+  PerformanceMetrics 
+} from './goalAdjustments';
+
+// Get TDEE adjustment recommendations using MacroFactor-style logic
 export const getTDEERecommendations = (
   tdeeData: TDEEData,
-  goal: 'cut' | 'gain' | 'maintenance' | 'recomp',
-  targetRate: number // % body weight per week
+  goal: GoalType,
+  targetRate: number, // % body weight per week
+  sex: 'male' | 'female',
+  energyLevel: number = 3,
+  hungerLevel: number = 3,
+  trainingPerformance: number = 3,
+  loggingConsistency: number = 0
 ) => {
+  const constraints = getGoalConstraints(goal, sex);
+  
+  // Build performance metrics
+  const performance: PerformanceMetrics = {
+    actualWeeklyRate: tdeeData.weeklyChangeRate,
+    targetWeeklyRate: targetRate,
+    adherenceScore: tdeeData.adherenceScore,
+    energyLevel,
+    hungerLevel,
+    trainingPerformance,
+    avgCaloriesConsumed: tdeeData.currentTDEE, // Approximation
+    loggingConsistency: loggingConsistency || tdeeData.confidence
+  };
+  
+  // Generate primary calorie adjustment
+  const adjustment = generateCalorieAdjustment(
+    tdeeData.currentTDEE,
+    tdeeData.currentTDEE, // Current calories = TDEE for now
+    performance,
+    goal,
+    constraints
+  );
+  
+  // Convert to recommendation format
   const recommendations = [];
   
-  // Check if current rate matches goal
-  const currentRate = (tdeeData.weeklyChange / tdeeData.trendWeight) * 100;
-  
-  if (goal === 'cut') {
-    if (currentRate > -targetRate * 0.5) {
-      recommendations.push({
-        type: 'increase_deficit',
-        message: `Weight loss is slower than target. Consider reducing calories by 100-200.`,
-        severity: 'warning' as const,
-        adjustment: -150
-      });
-    } else if (currentRate < -targetRate * 1.5) {
-      recommendations.push({
-        type: 'decrease_deficit',
-        message: `Weight loss is too rapid. Increase calories by 100-200 to preserve muscle.`,
-        severity: 'warning' as const,
-        adjustment: 150
-      });
-    }
-  } else if (goal === 'gain') {
-    if (currentRate < targetRate * 0.5) {
-      recommendations.push({
-        type: 'increase_surplus',
-        message: `Weight gain is slower than target. Consider adding 100-200 calories.`,
-        severity: 'info' as const,
-        adjustment: 150
-      });
-    } else if (currentRate > targetRate * 1.5) {
-      recommendations.push({
-        type: 'decrease_surplus',
-        message: `Weight gain is too rapid. Reduce calories by 100-200 to minimize fat gain.`,
-        severity: 'warning' as const,
-        adjustment: -150
-      });
-    }
+  // Add main adjustment recommendation
+  if (adjustment.type !== 'maintain') {
+    recommendations.push({
+      type: adjustment.type === 'increase' ? 'increase_calories' : 'decrease_calories',
+      message: adjustment.reasoning.join(' '),
+      severity: adjustment.priority,
+      adjustment: adjustment.calories - tdeeData.currentTDEE,
+      newCalories: adjustment.calories,
+      newMacros: adjustment.macros,
+      confidence: adjustment.confidence
+    });
   }
   
-  // Check adherence
-  if (tdeeData.adherenceScore < 70) {
+  // Add data quality warnings
+  if (tdeeData.dataQuality === 'low') {
     recommendations.push({
-      type: 'improve_adherence',
-      message: `Low adherence detected. Focus on consistency before making adjustments.`,
+      type: 'improve_data_quality',
+      message: 'Weigh yourself more frequently and log meals consistently for better recommendations.',
       severity: 'info' as const,
       adjustment: 0
     });
   }
   
-  // Check confidence
-  if (tdeeData.confidence < 50) {
-    recommendations.push({
-      type: 'need_more_data',
-      message: `Need more consistent data for accurate recommendations. Keep logging!`,
-      severity: 'info' as const,
-      adjustment: 0
-    });
+  // Add energy component insights if available
+  if (tdeeData.energyComponents && tdeeData.energyComponents.confidence > 0.7) {
+    const neatPercentage = (tdeeData.energyComponents.neat / tdeeData.energyComponents.total) * 100;
+    if (neatPercentage < 15 && goal === 'cut') {
+      recommendations.push({
+        type: 'metabolic_adaptation',
+        message: 'Your daily activity (NEAT) appears suppressed. Consider a diet break or increasing daily movement.',
+        severity: 'warning' as const,
+        adjustment: 0
+      });
+    }
   }
   
   return recommendations;

@@ -7,7 +7,10 @@ import {
   NutritionLog,
   WeightEntry,
   QuickAddFood,
-  WeeklyCheckIn
+  WeeklyCheckIn,
+  MealType,
+  ExpenditureData,
+  HabitEntry
 } from './types';
 
 export class SupabaseDB {
@@ -224,6 +227,37 @@ export class SupabaseDB {
   }
 
   // ========== Meal Operations ==========
+
+  async copyMealsFromDate(userId: string, fromDate: string, toDate: string): Promise<boolean> {
+    const client = await this.getAuthClient();
+    
+    // Get meals from source date
+    const sourceMeals = await this.getMealsByDate(userId, fromDate);
+    
+    if (sourceMeals.length === 0) {
+      return false;
+    }
+    
+    // Copy meals to target date
+    const copiedMeals = sourceMeals.map(meal => ({
+      clerk_user_id: meal.clerk_user_id,
+      food_id: meal.food_id,
+      amount_grams: meal.amount_grams,
+      meal_type: meal.meal_type,
+      logged_at: `${toDate}T${new Date(meal.logged_at).toISOString().split('T')[1]}`
+    }));
+    
+    const { error } = await client
+      .from('meals')
+      .insert(copiedMeals);
+    
+    if (error) {
+      console.error('Error copying meals:', error);
+      return false;
+    }
+    
+    return true;
+  }
 
   async getMealsByDate(userId: string, date: string): Promise<Meal[]> {
     const client = await this.getAuthClient();
@@ -530,6 +564,215 @@ export class SupabaseDB {
     return true;
   }
 
+  // ========== Meal Template Operations ==========
+
+  async getMealTemplates(userId: string): Promise<any[]> {
+    const client = await this.getAuthClient();
+    const { data, error } = await client
+      .from('meal_templates')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching meal templates:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async createMealTemplate(template: any): Promise<string | null> {
+    const client = await this.getAuthClient();
+    const { data, error } = await client
+      .from('meal_templates')
+      .insert(template)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating meal template:', error);
+      return null;
+    }
+
+    return data?.id || null;
+  }
+
+  async deleteMealTemplate(templateId: string): Promise<boolean> {
+    const client = await this.getAuthClient();
+    const { error } = await client
+      .from('meal_templates')
+      .delete()
+      .eq('id', templateId);
+
+    if (error) {
+      console.error('Error deleting meal template:', error);
+      return false;
+    }
+
+    return true;
+  }
+
+  async applyMealTemplate(userId: string, templateId: string, mealType: MealType, date: string): Promise<boolean> {
+    const client = await this.getAuthClient();
+    
+    // Get template
+    const { data: template, error: templateError } = await client
+      .from('meal_templates')
+      .select('*')
+      .eq('id', templateId)
+      .single();
+
+    if (templateError || !template) {
+      console.error('Error fetching meal template:', templateError);
+      return false;
+    }
+
+    // Create meals from template
+    const meals = template.foods.map((food: any) => ({
+      clerk_user_id: userId,
+      food_id: food.food_id,
+      amount_grams: food.amount_grams,
+      meal_type: mealType,
+      logged_at: `${date}T${new Date().toISOString().split('T')[1]}`
+    }));
+
+    const { error: mealsError } = await client
+      .from('meals')
+      .insert(meals);
+
+    if (mealsError) {
+      console.error('Error applying meal template:', mealsError);
+      return false;
+    }
+
+    return true;
+  }
+
+  // ========== Expenditure Tracking Operations ==========
+
+  async getExpenditureData(userId: string, limit?: number): Promise<ExpenditureData[]> {
+    const client = await this.getAuthClient();
+    let query = client
+      .from('expenditure_data')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .order('date', { ascending: false });
+
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching expenditure data:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async createExpenditureData(data: ExpenditureData): Promise<boolean> {
+    const client = await this.getAuthClient();
+    const { error } = await client
+      .from('expenditure_data')
+      .upsert(data, { onConflict: 'clerk_user_id,date' });
+
+    if (error) {
+      console.error('Error creating expenditure data:', error);
+      return false;
+    }
+
+    return true;
+  }
+
+  async getLatestExpenditureData(userId: string): Promise<ExpenditureData | null> {
+    const client = await this.getAuthClient();
+    const { data, error } = await client
+      .from('expenditure_data')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .order('date', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error('Error fetching latest expenditure data:', error);
+      return null;
+    }
+
+    return data && data.length > 0 ? data[0] : null;
+  }
+
+  // ========== Habit Tracking Operations ==========
+
+  async getHabitEntries(userId: string, limit?: number): Promise<HabitEntry[]> {
+    const client = await this.getAuthClient();
+    let query = client
+      .from('habit_entries')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .order('date', { ascending: false });
+
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching habit entries:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  async createOrUpdateHabitEntry(entry: HabitEntry): Promise<boolean> {
+    const client = await this.getAuthClient();
+    const { error } = await client
+      .from('habit_entries')
+      .upsert(entry, { onConflict: 'clerk_user_id,date' });
+
+    if (error) {
+      console.error('Error creating habit entry:', error);
+      return false;
+    }
+
+    return true;
+  }
+
+  async getHabitStreak(userId: string, habitType: keyof HabitEntry): Promise<number> {
+    const client = await this.getAuthClient();
+    const { data, error } = await client
+      .from('habit_entries')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .order('date', { ascending: false })
+      .limit(100); // Look back up to 100 days
+
+    if (error || !data) {
+      console.error('Error fetching habit streak:', error);
+      return 0;
+    }
+
+    let streak = 0;
+    const today = new Date();
+    
+    for (let i = 0; i < data.length; i++) {
+      const entryDate = new Date(data[i].date);
+      const daysDiff = Math.floor((today.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysDiff === i && data[i][habitType]) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  }
+
   // ========== Quick Add Foods Operations ==========
 
   async getQuickAddFoods(userId: string, limit?: number): Promise<QuickAddFood[]> {
@@ -555,6 +798,40 @@ export class SupabaseDB {
     }
 
     return data || [];
+  }
+
+  async getRecentFoods(userId: string, limit: number = 20): Promise<Food[]> {
+    const client = await this.getAuthClient();
+    
+    // Get recent foods from meals
+    const { data: recentMeals, error } = await client
+      .from('meals')
+      .select(`
+        food_id,
+        foods(*)
+      `)
+      .eq('clerk_user_id', userId)
+      .order('logged_at', { ascending: false })
+      .limit(limit * 2); // Get more to account for duplicates
+
+    if (error) {
+      console.error('Error fetching recent foods:', error);
+      return [];
+    }
+
+    // Remove duplicates and return unique foods
+    const seenFoods = new Set();
+    const uniqueFoods: Food[] = [];
+    
+    for (const meal of recentMeals || []) {
+      if (meal.foods && !seenFoods.has(meal.food_id)) {
+        seenFoods.add(meal.food_id);
+        uniqueFoods.push(meal.foods as unknown as Food);
+        if (uniqueFoods.length >= limit) break;
+      }
+    }
+    
+    return uniqueFoods;
   }
 
   async updateQuickAddFrequency(userId: string, foodId: string): Promise<boolean> {

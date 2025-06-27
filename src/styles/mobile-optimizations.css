@@ -1,0 +1,236 @@
+/* Mobile Touch Target Optimizations */
+
+/* Ensure all interactive elements meet minimum touch target size */
+@media (max-width: 768px) {
+  /* Buttons */
+  button:not(.nav-item):not(.fab-main):not(.fab-action-button),
+  .btn,
+  .button,
+  a[role="button"] {
+    min-height: 44px;
+    padding: 12px 16px;
+  }
+  
+  /* Small buttons need larger tap areas */
+  button.btn-sm,
+  .button-sm {
+    min-height: 36px;
+    padding: 8px 12px;
+    position: relative;
+  }
+  
+  /* Invisible tap area extension for small buttons */
+  button.btn-sm::after,
+  .button-sm::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    bottom: -4px;
+    left: -4px;
+  }
+  
+  /* Form inputs */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="search"],
+  input[type="date"],
+  input[type="time"],
+  textarea,
+  select {
+    min-height: 44px;
+    padding: 12px 16px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  /* Clickable list items */
+  .clickable-list-item,
+  .food-item,
+  .meal-item {
+    min-height: 56px;
+    padding: 12px 16px;
+  }
+  
+  /* Navigation items */
+  .nav-link,
+  .tab-item {
+    min-height: 44px;
+    padding: 12px 16px;
+  }
+  
+  /* Cards that are clickable */
+  .card[onclick],
+  .card[role="button"],
+  .clickable-card {
+    min-height: 60px;
+  }
+  
+  /* Icon buttons need larger tap areas */
+  .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Spacing between interactive elements */
+  .button-group > * + *,
+  .action-list > * + * {
+    margin-top: 8px;
+  }
+  
+  /* Radio buttons and checkboxes */
+  input[type="radio"],
+  input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    margin: 12px;
+  }
+  
+  /* Labels for radio/checkbox should be tappable */
+  label:has(input[type="radio"]),
+  label:has(input[type="checkbox"]) {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 8px 0;
+    cursor: pointer;
+  }
+}
+
+/* Improve tap feedback */
+@media (hover: none) {
+  button:active,
+  .btn:active,
+  .button:active,
+  a[role="button"]:active,
+  .clickable-card:active,
+  .clickable-list-item:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
+}
+
+/* Safe area padding for iOS devices */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Prevent text selection on interactive elements */
+button,
+.btn,
+.button,
+.nav-item,
+.clickable-card,
+.clickable-list-item {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Improve scrolling performance */
+.scrollable-list,
+.scroll-container {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Disable double-tap zoom on buttons */
+button,
+.btn,
+.button,
+input[type="button"],
+input[type="submit"] {
+  touch-action: manipulation;
+}
+
+/* Loading states for mobile */
+.mobile-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+}
+
+/* Pull to refresh container */
+.pull-to-refresh-container {
+  position: relative;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Swipe gesture indicators */
+.swipe-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 40px;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.swipe-indicator.left {
+  left: 8px;
+}
+
+.swipe-indicator.right {
+  right: 8px;
+}
+
+/* Mobile-optimized modals */
+@media (max-width: 768px) {
+  .modal,
+  .dialog {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 90vh;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .modal-header,
+  .dialog-header {
+    position: sticky;
+    top: 0;
+    background: inherit;
+    z-index: 1;
+    padding: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Keyboard appearance improvements */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important; /* Prevents zoom on iOS */
+  }
+}
+
+/* Haptic feedback trigger classes */
+.haptic-light {
+  /* Will be handled by JavaScript */
+}
+
+.haptic-medium {
+  /* Will be handled by JavaScript */
+}
+
+.haptic-heavy {
+  /* Will be handled by JavaScript */
+}

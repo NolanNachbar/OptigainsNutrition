@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { format, differenceInDays } from 'date-fns';
 import { NutritionLog, UserNutritionProfile, Meal, MealType } from '../utils/types';
 import Actionbar from '../components/Actionbar';
-import { getUserProfile, createOrUpdateUserProfile, getNutritionLog, getMealsByDate, getWeightEntries, getLatestWeeklyCheckIn } from '../utils/database';
-import { Card, MetricCard, CardGroup } from '../components/ui/Card';
+import { getUserProfile, getNutritionLog, getMealsByDate, getWeightEntries, getLatestWeeklyCheckIn } from '../utils/database';
+import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { MultiProgressRing, MiniProgressRing } from '../components/ui/ProgressRing';
+import { MultiProgressRing } from '../components/ui/ProgressRing';
 import { theme } from '../styles/theme';
-import TDEECard from '../components/TDEECard';
-import CoachingRecommendations from '../components/CoachingRecommendations';
+// Removed unused imports
+import { QuickAddPanel } from '../components/QuickAddPanel';
+import { DashboardSkeleton } from '../components/ui/SkeletonLoader';
+// import { useTDEEWorker } from '../hooks/useWebWorker'; // TODO: Implement worker usage
+import { useCache, cacheKeys } from '../utils/cache';
 
 // Simple TDEE types for now
 interface SimpleTDEEData {
@@ -44,6 +47,10 @@ const DashboardPage: React.FC = () => {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [showCheckInReminder, setShowCheckInReminder] = useState(false);
+  
+  // Performance optimizations
+  // const { calculateTDEE: workerCalculateTDEE } = useTDEEWorker(); // TODO: Use for heavy calculations
+  const { getCached, setCached } = useCache<SimpleTDEEData>();
 
   const today = format(new Date(), 'yyyy-MM-dd');
 
@@ -71,8 +78,16 @@ const DashboardPage: React.FC = () => {
     initAndFetch();
   }, [isLoaded, user, today]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchTDEEData = async () => {
+  const fetchTDEEData = useCallback(async () => {
     if (!user || !profile) return;
+
+    // Check cache first
+    const cacheKey = cacheKeys.tdee(user.id, today);
+    const cached = getCached(cacheKey);
+    if (cached) {
+      setTdeeData(cached);
+      return;
+    }
 
     try {
       // Get weight entries for trend calculation
@@ -126,10 +141,19 @@ const DashboardPage: React.FC = () => {
       }
 
       setRecommendations(newRecommendations);
+      
+      // Cache the result
+      setCached(cacheKey, {
+        currentTDEE: profile.tdee_estimate,
+        weeklyChange,
+        confidence: weights.length >= 14 ? 'high' : weights.length >= 7 ? 'medium' : 'low',
+        trendDirection,
+        adherenceScore
+      });
     } catch (error) {
       console.error('Error fetching TDEE data:', error);
     }
-  };
+  }, [user, profile, todayLog]);
 
   const fetchData = async () => {
     if (!user) return;
@@ -173,36 +197,22 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleApplyRecommendation = async (changes: any) => {
-    if (!profile) return;
-    
-    const updatedProfile = {
-      ...profile,
-      target_macros: {
-        ...profile.target_macros,
-        ...changes
-      }
-    };
-    
-    const success = await createOrUpdateUserProfile(updatedProfile);
-    if (success) {
-      setProfile(updatedProfile);
-      await fetchData();
-    }
-  };
+  // Removed unused function
 
   // Calculate consumed macros from meals
-  const consumedMacros = meals.reduce((totals, meal) => {
-    if (!meal.food) return totals;
-    const multiplier = meal.amount_grams / 100;
-    return {
-      calories: totals.calories + Math.round(meal.food.calories_per_100g * multiplier),
-      protein: totals.protein + Math.round(meal.food.protein_per_100g * multiplier),
-      carbs: totals.carbs + Math.round(meal.food.carbs_per_100g * multiplier),
-      fat: totals.fat + Math.round(meal.food.fat_per_100g * multiplier),
-      fiber: totals.fiber + Math.round((meal.food.fiber_per_100g || 0) * multiplier)
-    };
-  }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+  const consumedMacros = useMemo(() => {
+    return meals.reduce((totals, meal) => {
+      if (!meal.food) return totals;
+      const multiplier = meal.amount_grams / 100;
+      return {
+        calories: totals.calories + Math.round(meal.food.calories_per_100g * multiplier),
+        protein: totals.protein + Math.round(meal.food.protein_per_100g * multiplier),
+        carbs: totals.carbs + Math.round(meal.food.carbs_per_100g * multiplier),
+        fat: totals.fat + Math.round(meal.food.fat_per_100g * multiplier),
+        fiber: totals.fiber + Math.round((meal.food.fiber_per_100g || 0) * multiplier)
+      };
+    }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+  }, [meals]);
 
   const consumedCalories = consumedMacros.calories;
   const targetCalories = profile?.target_macros.calories || 0;
@@ -210,24 +220,25 @@ const DashboardPage: React.FC = () => {
   const calorieProgress = targetCalories > 0 ? (consumedCalories / targetCalories) * 100 : 0;
 
   // Group meals by type
-  const mealGroups = meals.reduce((groups, meal) => {
-    const group = groups.find(g => g.type === meal.meal_type);
-    if (group) {
-      group.meals.push(meal);
-    } else {
-      groups.push({ type: meal.meal_type, meals: [meal] });
-    }
-    return groups;
-  }, [] as { type: MealType; meals: Meal[] }[]);
+  const mealGroups = useMemo(() => {
+    return meals.reduce((groups, meal) => {
+      const group = groups.find(g => g.type === meal.meal_type);
+      if (group) {
+        group.meals.push(meal);
+      } else {
+        groups.push({ type: meal.meal_type, meals: [meal] });
+      }
+      return groups;
+    }, [] as { type: MealType; meals: Meal[] }[]);
+  }, [meals]);
 
   if (!isLoaded || loading) {
     return (
       <div className="min-h-screen bg-gray-900">
         <Actionbar />
-        <div className="pt-24 flex items-center justify-center min-h-screen">
-          <div className="flex flex-col items-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-2 border-gray-700 border-t-blue-500"></div>
-            <p className="mt-4 text-gray-400">Loading your nutrition data...</p>
+        <div className="w-full pt-20 pb-24">
+          <div className="max-w-4xl mx-auto px-4">
+            <DashboardSkeleton />
           </div>
         </div>
       </div>
@@ -238,25 +249,20 @@ const DashboardPage: React.FC = () => {
     <div className="min-h-screen bg-gray-900">
       <Actionbar />
       
-      <div className="w-full pt-24 pb-20">
+      <div className="w-full pt-20 pb-24">
         <div className="max-w-4xl mx-auto px-4">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold tracking-tight">Welcome back{user?.firstName ? `, ${user.firstName}` : ''}!</h1>
-            <p className="text-gray-400 mt-2">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+          {/* Simplified Header */}
+          <div className="mb-6">
+            <p className="text-sm text-gray-500 font-medium uppercase tracking-wider">{format(new Date(), 'EEEE, MMMM d')}</p>
+            <h1 className="text-2xl font-bold mt-1">Today's Overview</h1>
           </div>
           
-          <div className="max-w-2xl mx-auto">
+          <div className="space-y-4">
             {/* Weekly Check-in Reminder */}
             {showCheckInReminder && (
               <Card variant="elevated" className="mb-6 bg-blue-500/10 border-blue-500/30">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-500/20 rounded-lg">
-                      <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
+                  <div className="flex items-center gap-3">
                     <div>
                       <h3 className="font-semibold text-white">Time for your weekly check-in!</h3>
                       <p className="text-sm text-gray-400 mt-1">Review your progress and get personalized recommendations</p>
@@ -273,85 +279,95 @@ const DashboardPage: React.FC = () => {
               </Card>
             )}
 
-            {/* Macros Summary */}
-            <Card variant="glass" className="mb-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold">Today's Nutrition</h2>
-                <MiniProgressRing
-                  value={calorieProgress}
-                  size={32}
-                  strokeWidth={4}
-                />
-              </div>
-              
-              {/* Calorie Overview */}
-              <div className="flex justify-between items-center mb-8">
-                <div>
-                  <div className="text-4xl font-bold">{consumedCalories.toLocaleString()}</div>
-                  <div className="text-sm text-gray-400 mt-1">calories consumed</div>
+            {/* Primary Calorie Card - Hero Metric */}
+            <Card variant="glass" className="mb-4" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)', borderColor: 'rgba(59, 130, 246, 0.2)' }}>
+              <div className="text-center py-8">
+                <div className="text-6xl font-bold tracking-tight mb-2">
+                  {consumedCalories.toLocaleString()}
                 </div>
-                <div className="text-right">
-                  <div className="text-2xl font-semibold text-blue-500">{remainingCalories.toLocaleString()}</div>
-                  <div className="text-sm text-gray-400 mt-1">remaining</div>
-                </div>
-              </div>
-              
-              {/* Progress Bar */}
-              <div className="mb-8">
-                <div className="h-3 bg-gray-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-700 ease-out"
-                    style={{ width: `${Math.min(calorieProgress, 100)}%` }}
-                  />
-                </div>
-              </div>
-              
-              {/* Macro Distribution */}
-              {consumedCalories > 0 && (
-                <div className="flex justify-center mb-8">
+                <div className="text-lg text-gray-400 mb-6">calories consumed</div>
+                
+                {/* Large centered progress ring */}
+                <div className="flex justify-center mb-6">
                   <MultiProgressRing
-                    size={160}
-                    strokeWidth={20}
+                    size={200}
+                    strokeWidth={16}
                     values={[
                       {
-                        value: (consumedMacros.protein * 4 / consumedCalories) * 100,
-                        color: theme.colors.blue[500],
-                        label: 'Protein'
-                      },
-                      {
-                        value: (consumedMacros.carbs * 4 / consumedCalories) * 100,
-                        color: theme.colors.green[500],
-                        label: 'Carbs'
-                      },
-                      {
-                        value: (consumedMacros.fat * 9 / consumedCalories) * 100,
-                        color: theme.colors.orange[500],
-                        label: 'Fat'
+                        value: Math.min(calorieProgress, 100),
+                        color: calorieProgress > 110 ? theme.colors.semantic.error : theme.colors.primary[500],
+                        label: 'Progress'
                       }
                     ]}
                   />
                 </div>
-              )}
-              
-              {/* Macro Details */}
-              <CardGroup>
-                <MetricCard
-                  title="Protein"
-                  value={`${consumedMacros.protein}g`}
-                  subtitle={`of ${profile?.target_macros.protein || 0}g`}
-                />
-                <MetricCard
-                  title="Carbs"
-                  value={`${consumedMacros.carbs}g`}
-                  subtitle={`of ${profile?.target_macros.carbs || 0}g`}
-                />
-                <MetricCard
-                  title="Fat"
-                  value={`${consumedMacros.fat}g`}
-                  subtitle={`of ${profile?.target_macros.fat || 0}g`}
-                />
-              </CardGroup>
+                
+                <div className="flex justify-center gap-8">
+                  <div>
+                    <div className="text-2xl font-semibold">{targetCalories.toLocaleString()}</div>
+                    <div className="text-sm text-gray-500">target</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold text-blue-500">{remainingCalories.toLocaleString()}</div>
+                    <div className="text-sm text-gray-500">remaining</div>
+                  </div>
+                </div>
+              </div>
             </Card>
+            
+            {/* Macros Grid - Secondary Metrics */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <Card variant="elevated" padding="md">
+                <div className="text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Protein</div>
+                  <div className="text-2xl font-bold text-blue-400">{consumedMacros.protein}</div>
+                  <div className="text-xs text-gray-600">/ {profile?.target_macros.protein || 0}g</div>
+                  <div className="mt-2">
+                    <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-700"
+                        style={{ width: `${Math.min((consumedMacros.protein / (profile?.target_macros.protein || 1)) * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </Card>
+              
+              <Card variant="elevated" padding="md">
+                <div className="text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Carbs</div>
+                  <div className="text-2xl font-bold text-green-400">{consumedMacros.carbs}</div>
+                  <div className="text-xs text-gray-600">/ {profile?.target_macros.carbs || 0}g</div>
+                  <div className="mt-2">
+                    <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-green-500 transition-all duration-700"
+                        style={{ width: `${Math.min((consumedMacros.carbs / (profile?.target_macros.carbs || 1)) * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </Card>
+              
+              <Card variant="elevated" padding="md">
+                <div className="text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Fat</div>
+                  <div className="text-2xl font-bold text-orange-400">{consumedMacros.fat}</div>
+                  <div className="text-xs text-gray-600">/ {profile?.target_macros.fat || 0}g</div>
+                  <div className="mt-2">
+                    <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-orange-500 transition-all duration-700"
+                        style={{ width: `${Math.min((consumedMacros.fat / (profile?.target_macros.fat || 1)) * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Quick Add Panel */}
+            <QuickAddPanel />
 
             {/* Today's Meals */}
             {mealGroups.length > 0 && (
@@ -391,112 +407,97 @@ const DashboardPage: React.FC = () => {
               </Card>
             )}
 
-            {/* TDEE & Coaching Section */}
-            {tdeeData && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <TDEECard tdeeData={tdeeData} />
-                {recommendations.length > 0 && (
-                  <CoachingRecommendations 
-                    recommendations={recommendations}
-                    onApplyChanges={(changes) => handleApplyRecommendation(changes)}
-                  />
-                )}
-              </div>
-            )}
+            {/* TDEE & Weight Trend Row */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {tdeeData && (
+                <Card variant="elevated" padding="md" hover onClick={() => navigate('/expenditure')}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">TDEE</div>
+                      <div className="text-2xl font-bold">{tdeeData.currentTDEE}</div>
+                      <div className="text-xs text-gray-600">cal/day</div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-sm font-medium ${tdeeData.weeklyChange > 0 ? 'text-red-400' : tdeeData.weeklyChange < 0 ? 'text-green-400' : 'text-gray-400'}`}>
+                        {tdeeData.weeklyChange > 0 ? '+' : ''}{tdeeData.weeklyChange.toFixed(1)}kg
+                      </div>
+                      <div className="text-xs text-gray-600">this week</div>
+                    </div>
+                  </div>
+                </Card>
+              )}
+              
+              <Card variant="elevated" padding="md" hover onClick={() => navigate('/weekly-check-in')}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Adherence</div>
+                    <div className="text-2xl font-bold">{tdeeData?.adherenceScore || 0}%</div>
+                    <div className="text-xs text-gray-600">today</div>
+                  </div>
+                  <div className="text-3xl opacity-20">📊</div>
+                </div>
+              </Card>
+            </div>
 
-            {/* Quick Actions */}
-            <Card variant="elevated" className="mb-6">
-              <h2 className="text-xl font-semibold mb-6">Quick Actions</h2>
-              <div className="space-y-3">
-                <Button
-                  onClick={() => navigate('/diary')}
-                  variant="primary"
-                  size="lg"
-                  className="w-full"
-                  icon={
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* Quick Actions Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <Card 
+                variant="elevated" 
+                padding="md" 
+                hover 
+                onClick={() => navigate('/analytics')}
+                className="cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="font-medium">Analytics</div>
+                    <div className="text-xs text-gray-500">View trends</div>
+                  </div>
+                </div>
+              </Card>
+              
+              <Card 
+                variant="elevated" 
+                padding="md" 
+                hover 
+                onClick={() => navigate('/recipe-builder')}
+                className="cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                    <svg className="w-1 h-1 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
-                  }
-                >
-                  View Food Diary
-                </Button>
-                <Button
-                  onClick={() => navigate('/add-food?meal=snack')}
-                  variant="secondary"
-                  size="lg"
-                  className="w-full"
-                  icon={
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  }
-                >
-                  Add Food
-                </Button>
-                <Button
-                  onClick={() => navigate('/progress')}
-                  variant="secondary"
-                  size="lg"
-                  className="w-full"
-                  icon={
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  }
-                >
-                  View Progress
-                </Button>
-                <Button
-                  onClick={() => navigate('/weekly-check-in')}
-                  variant="secondary"
-                  size="lg"
-                  className="w-full"
-                  icon={
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  }
-                >
-                  Weekly Check-In
-                </Button>
-                <Button
-                  onClick={() => navigate('/analytics')}
-                  variant="secondary"
-                  size="lg"
-                  className="w-full"
-                  icon={
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  }
-                >
-                  View Analytics
-                </Button>
-              </div>
-            </Card>
+                  </div>
+                  <div>
+                    <div className="font-medium">Recipes</div>
+                    <div className="text-xs text-gray-500">Create meals</div>
+                  </div>
+                </div>
+              </Card>
+            </div>
 
-            {/* Today's Summary */}
-            {todayLog && (
-              <Card variant="glass">
-                <h2 className="text-xl font-semibold mb-6">Today's Summary</h2>
-                <CardGroup>
-                  <MetricCard
-                    title="Meals Logged"
-                    value={meals.length.toString()}
-                    subtitle="entries today"
-                  />
-                  <MetricCard
-                    title="Fiber"
-                    value={`${consumedMacros.fiber}g`}
-                    subtitle="consumed"
-                  />
-                  <MetricCard
-                    title="Goal Type"
-                    value={profile?.goal_type || 'maintenance'}
-                    subtitle="current program"
-                  />
-                </CardGroup>
+            {/* Coaching Insights */}
+            {recommendations.length > 0 && (
+              <Card variant="glass" className="mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Today's Insights</h3>
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/coaching')}>
+                    View All
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {recommendations.slice(0, 2).map((rec, index) => (
+                    <div key={index} className="p-3 bg-gray-800/50 rounded-lg">
+                      <p className="text-sm">{rec.message}</p>
+                    </div>
+                  ))}
+                </div>
               </Card>
             )}
           </div>

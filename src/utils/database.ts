@@ -18,6 +18,7 @@ export const getNutritionLogs = (userId: string, days: number) => db.getNutritio
 export const getMealsByDate = (userId: string, date: string) => db.getMealsByDate(userId, date);
 export const createMeal = (meal: any) => db.createMeal(meal);
 export const deleteMeal = (mealId: string) => db.deleteMeal(mealId);
+export const copyMealsFromDate = (userId: string, fromDate: string, toDate: string) => db.copyMealsFromDate(userId, fromDate, toDate);
 export const searchFoods = (query: string, userId?: string) => db.searchFoods(query, userId);
 export const createFood = async (food: any) => {
   const foodId = await db.createFood(food);
@@ -36,6 +37,17 @@ export const createWeeklyCheckIn = (checkIn: any) => db.createWeeklyCheckIn(chec
 export const getLatestWeeklyCheckIn = (userId: string) => db.getLatestWeeklyCheckIn(userId);
 export const getQuickAddFoods = (userId: string, limit?: number) => db.getQuickAddFoods(userId, limit);
 export const updateQuickAddFrequency = (userId: string, foodId: string) => db.updateQuickAddFrequency(userId, foodId);
+export const getRecentFoods = (userId: string, limit?: number) => db.getRecentFoods(userId, limit);
+export const getMealTemplates = (userId: string) => db.getMealTemplates(userId);
+export const createMealTemplate = (template: any) => db.createMealTemplate(template);
+export const deleteMealTemplate = (templateId: string) => db.deleteMealTemplate(templateId);
+export const applyMealTemplate = (userId: string, templateId: string, mealType: any, date: string) => db.applyMealTemplate(userId, templateId, mealType, date);
+export const getExpenditureData = (userId: string, limit?: number) => db.getExpenditureData(userId, limit);
+export const createExpenditureData = (data: any) => db.createExpenditureData(data);
+export const getLatestExpenditureData = (userId: string) => db.getLatestExpenditureData(userId);
+export const getHabitEntries = (userId: string, limit?: number) => db.getHabitEntries(userId, limit);
+export const createOrUpdateHabitEntry = (entry: any) => db.createOrUpdateHabitEntry(entry);
+export const getHabitStreak = (userId: string, habitType: any) => db.getHabitStreak(userId, habitType);
 
 // Additional functions from nutritionDatabase.ts
 export const calculateDailyTotals = async (userId: string, date: string) => {
@@ -116,6 +128,23 @@ export const calculateWeeklyAverages = async (userId: string, weekEndDate: strin
   const adherence = logs.length >= 5 ? 80 : (logs.length / 7) * 100;
   
   return { macros: avgMacros, adherence: Math.round(adherence) };
+};
+
+// Quick add meal helper
+export const quickAddMeal = async (userId: string, mealData: any) => {
+  const mealId = await createMeal({
+    clerk_user_id: userId,
+    ...mealData,
+    logged_at: new Date().toISOString()
+  });
+  
+  if (mealId) {
+    // Update quick add frequency
+    await updateQuickAddFrequency(userId, mealData.food_id);
+    return mealId;
+  }
+  
+  return null;
 };
 
 export const getNutritionLogRange = async (userId: string, startDate: string, endDate: string) => {

@@ -14,15 +14,16 @@ const ActionBar: React.FC = () => {
 
   // Navigation items
   const navItems = [
-    { path: "/", label: "Dashboard" },
+    { path: "/dashboard", label: "Dashboard" },
     { path: "/diary", label: "Diary" },
-    { path: "/progress", label: "Progress" },
-    { path: "/coaching", label: "Coaching" },
-    { path: "/foods", label: "Foods" },
+    { path: "/expenditure", label: "Expenditure" },
+    { path: "/nutrition-dashboard", label: "Nutrition" },
+    { path: "/habits", label: "Habits" },
+    { path: "/plate-coach", label: "Plate Coach" },
   ];
 
   return (
-    <div className="action-bar">
+    <div className="action-bar desktop-only-nav">
       <div className="action-bar-container">
         {/* Logo and Brand */}
         <div className="brand-section" onClick={() => navigate("/")}>

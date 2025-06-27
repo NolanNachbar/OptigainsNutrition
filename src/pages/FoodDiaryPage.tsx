@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
-import { format, addDays, subDays } from 'date-fns';
+import { format, addDays, subDays, isToday } from 'date-fns';
 import { Meal, NutritionLog, MealType, UserNutritionProfile } from '../utils/types';
 import Actionbar from '../components/Actionbar';
-import { getMealsByDate, deleteMeal, getNutritionLog, getUserProfile } from '../utils/database';
-// Removed copyMealsFromDate import - function needs to be implemented
+import { getMealsByDate, deleteMeal, getNutritionLog, getUserProfile, copyMealsFromDate, createOrUpdateNutritionLog, createMeal } from '../utils/database';
 import { formatWeight } from '../utils/unitConversions';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+// Using SVG icons instead of lucide-react for now
 
 interface MealGroup {
   type: MealType;
@@ -15,6 +17,15 @@ interface MealGroup {
   totalProtein: number;
   totalCarbs: number;
   totalFat: number;
+}
+
+interface MacroBarProps {
+  label: string;
+  current: number;
+  target: number;
+  unit?: string;
+  color: string;
+  percentage?: boolean;
 }
 
 const FoodDiaryPage: React.FC = () => {
@@ -27,11 +38,65 @@ const FoodDiaryPage: React.FC = () => {
   const [userProfile, setUserProfile] = useState<UserNutritionProfile | null>(null);
   
   const foodUnit = userProfile?.food_weight_unit || 'metric';
+  const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
+  const [editingMealName, setEditingMealName] = useState<string | null>(null);
+  const [customMealNames, setCustomMealNames] = useState<{[key: string]: string}>({});
+  
+  const MacroBar: React.FC<MacroBarProps> = ({ label, current, target, unit = 'g', color, percentage = true }) => {
+    const percent = target > 0 ? (current / target) * 100 : 0;
+    const isOver = percent > 100;
+    
+    return (
+      <div className="space-y-1">
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-400">{label}</span>
+          <span className={`font-medium ${isOver ? 'text-red-400' : ''}`}>
+            {current}{unit} / {target}{unit}
+          </span>
+        </div>
+        <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div 
+            className={`h-full transition-all duration-300 ${isOver ? 'bg-red-500' : ''}`}
+            style={{ 
+              width: `${Math.min(percent, 100)}%`,
+              backgroundColor: isOver ? undefined : color 
+            }}
+          />
+        </div>
+        {percentage && (
+          <div className="text-right text-xs text-gray-500">
+            {Math.round(percent)}%
+          </div>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
-    fetchMeals();
-    fetchUserProfile();
+    if (user) {
+      fetchMeals();
+      fetchUserProfile();
+      loadCustomMealNames();
+    }
   }, [user, selectedDate]);
+
+  const loadCustomMealNames = () => {
+    const saved = localStorage.getItem('customMealNames');
+    if (saved) {
+      setCustomMealNames(JSON.parse(saved));
+    }
+  };
+
+  const saveMealName = (mealType: string, newName: string) => {
+    const updated = { ...customMealNames, [mealType]: newName };
+    setCustomMealNames(updated);
+    localStorage.setItem('customMealNames', JSON.stringify(updated));
+    setEditingMealName(null);
+  };
+
+  const getMealDisplayName = (mealType: string) => {
+    return customMealNames[mealType] || mealType.charAt(0).toUpperCase() + mealType.slice(1);
+  };
   
   const fetchUserProfile = async () => {
     if (!user) return;
@@ -86,7 +151,8 @@ const FoodDiaryPage: React.FC = () => {
           calories: 0,
           protein: 0,
           carbs: 0,
-          fat: 0
+          fat: 0,
+          fiber: 0
         });
       }
     } catch (error) {
@@ -131,19 +197,17 @@ const FoodDiaryPage: React.FC = () => {
   const handleCopyPreviousDay = async () => {
     if (!user) return;
     
-    // const fromDate = format(subDays(selectedDate, 1), 'yyyy-MM-dd');
-    // const toDate = format(selectedDate, 'yyyy-MM-dd');
+    const fromDate = format(subDays(selectedDate, 1), 'yyyy-MM-dd');
+    const toDate = format(selectedDate, 'yyyy-MM-dd');
     
     try {
-      // TODO: Implement copyMealsFromDate functionality
-      // const success = await copyMealsFromDate(user.id, fromDate, toDate);
-      // if (success) {
-      //   // Refresh meals after copying
-      //   await fetchMeals();
-      // } else {
-      //   alert('No meals found on the previous day to copy.');
-      // }
-      alert('Copy previous day feature is not yet implemented');
+      const success = await copyMealsFromDate(user.id, fromDate, toDate);
+      if (success) {
+        // Refresh meals after copying
+        await fetchMeals();
+      } else {
+        alert('No meals found on the previous day to copy.');
+      }
     } catch (error) {
       console.error('Error copying meals:', error);
       alert('Failed to copy meals from previous day.');
@@ -165,6 +229,37 @@ const FoodDiaryPage: React.FC = () => {
     }
   };
 
+  const toggleMealExpanded = (mealType: MealType) => {
+    setExpandedMeals(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(mealType)) {
+        newSet.delete(mealType);
+      } else {
+        newSet.add(mealType);
+      }
+      return newSet;
+    });
+  };
+
+  const handleEditMeal = (meal: Meal) => {
+    // Navigate to edit page with meal data
+    navigate(`/add-food?edit=${meal.id}&meal=${meal.meal_type}`);
+  };
+
+  const handleCopyMeal = async (meal: Meal) => {
+    if (!user) return;
+    try {
+      await createMeal({
+        ...meal,
+        id: undefined,
+        logged_at: new Date().toISOString()
+      });
+      await fetchMeals();
+    } catch (error) {
+      console.error('Error copying meal:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900">
@@ -182,151 +277,296 @@ const FoodDiaryPage: React.FC = () => {
     <div className="min-h-screen bg-gray-900">
       <Actionbar />
       
-      <div className="w-full pt-24 pb-20">
+      <div className="w-full pt-20 pb-20">
         <div className="max-w-4xl mx-auto px-4">
-          <h1 className="text-2xl font-bold mb-6">Food Diary</h1>
-          <div className="max-w-2xl mx-auto">
-            {/* Date Navigation */}
-            <div className="bg-gray-800 rounded-lg shadow-md p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => handleDateChange('prev')}
-              className="p-2 hover:bg-gray-750 rounded"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div className="text-center">
-              <div className="font-semibold">{format(selectedDate, 'EEEE')}</div>
-              <div className="text-sm text-gray-400">{format(selectedDate, 'MMM d, yyyy')}</div>
-            </div>
-            <button
-              onClick={() => handleDateChange('next')}
-              className="p-2 hover:bg-gray-750 rounded"
-              disabled={selectedDate >= new Date()}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Daily Summary */}
-        <div className="bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Daily Summary</h2>
-          <div className="grid grid-cols-4 gap-4 text-center">
-            <div>
-              <div className="text-2xl font-bold text-blue-600">
-                {Math.round(nutritionLog?.calories || 0)}
-              </div>
-              <div className="text-xs text-gray-400">Calories</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-red-600">
-                {Math.round(nutritionLog?.protein || 0)}g
-              </div>
-              <div className="text-xs text-gray-400">Protein</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-green-600">
-                {Math.round(nutritionLog?.carbs || 0)}g
-              </div>
-              <div className="text-xs text-gray-400">Carbs</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-yellow-600">
-                {Math.round(nutritionLog?.fat || 0)}g
-              </div>
-              <div className="text-xs text-gray-400">Fat</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => navigate('/add-food')}
-            className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            + Add Food
-          </button>
-          <button
-            onClick={handleCopyPreviousDay}
-            className="bg-gray-700 text-gray-300 py-3 px-4 rounded-lg hover:bg-gray-600 transition-colors"
-          >
-            Copy Previous Day
-          </button>
-        </div>
-
-        {/* Meals by Type */}
-        {mealGroups.map(group => (
-          <div key={group.type} className="bg-gray-800 rounded-lg shadow-md p-4 mb-4">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-semibold capitalize">{group.type}</h3>
-              {group.totalCalories > 0 && (
-                <div className="text-sm text-gray-400">
-                  {group.totalCalories} cal
-                </div>
-              )}
-            </div>
-            
-            {group.meals.length === 0 ? (
+          {/* Date Navigation */}
+          <Card className="mb-6 p-0 overflow-hidden">
+            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-800 to-gray-750">
               <button
-                onClick={() => navigate(`/add-food?meal=${group.type}`)}
-                className="w-full text-left text-gray-500 hover:text-blue-600 py-2"
+                onClick={() => handleDateChange('prev')}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
               >
-                + Add {group.type}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
               </button>
-            ) : (
-              <>
-                {group.meals.map(meal => (
-                  <div key={meal.id} className="border-t pt-2 mt-2">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="font-medium">{meal.food?.name}</div>
-                        <div className="text-sm text-gray-400">
-                          {formatWeight(meal.amount_grams, foodUnit)} • {Math.round((meal.food?.calories_per_100g || 0) * meal.amount_grams / 100)} cal
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteMeal(meal.id!)}
-                        className="text-red-500 hover:text-red-700 ml-2"
+              <div className="text-center">
+                <div className="font-semibold text-lg">{format(selectedDate, 'EEEE')}</div>
+                <div className="text-sm text-gray-400">{format(selectedDate, 'MMMM d, yyyy')}</div>
+                {isToday(selectedDate) && (
+                  <div className="text-xs text-blue-400 mt-1">Today</div>
+                )}
+              </div>
+              <button
+                onClick={() => handleDateChange('next')}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                disabled={selectedDate >= new Date()}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </Card>
+
+          {/* Macro Summary */}
+          {userProfile && (
+            <Card className="mb-6">
+              <div className="p-6 space-y-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-lg font-semibold">Today's Progress</h2>
+                  <div className="text-2xl font-bold text-blue-400">
+                    {Math.round(nutritionLog?.calories || 0)} cal
+                  </div>
+                </div>
+                
+                <MacroBar 
+                  label="Calories"
+                  current={Math.round(nutritionLog?.calories || 0)}
+                  target={userProfile.target_macros.calories}
+                  unit=""
+                  color="#3B82F6"
+                />
+                
+                <div className="grid grid-cols-3 gap-4 mt-4">
+                  <MacroBar 
+                    label="Protein"
+                    current={Math.round(nutritionLog?.protein || 0)}
+                    target={userProfile.target_macros.protein}
+                    color="#EF4444"
+                  />
+                  <MacroBar 
+                    label="Carbs"
+                    current={Math.round(nutritionLog?.carbs || 0)}
+                    target={userProfile.target_macros.carbs}
+                    color="#10B981"
+                  />
+                  <MacroBar 
+                    label="Fat"
+                    current={Math.round(nutritionLog?.fat || 0)}
+                    target={userProfile.target_macros.fat}
+                    color="#F59E0B"
+                  />
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Quick Actions */}
+          <div className="flex gap-3 mb-6">
+            <Button
+              onClick={() => navigate('/add-food')}
+              className="flex-1 flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Food
+            </Button>
+            <Button
+              onClick={handleCopyPreviousDay}
+              variant="secondary"
+              className="flex items-center gap-2"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Copy Yesterday
+            </Button>
+          </div>
+
+          {/* Meals by Type */}
+          {mealGroups.map(group => (
+            <Card key={group.type} className="mb-4">
+              <div className="p-4">
+                <div 
+                  className="flex justify-between items-center mb-3 cursor-pointer"
+                  onClick={() => toggleMealExpanded(group.type)}
+                >
+                  <div className="flex items-center gap-2">
+                    {editingMealName === group.type ? (
+                      <input
+                        type="text"
+                        defaultValue={getMealDisplayName(group.type)}
+                        onBlur={(e) => saveMealName(group.type, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            saveMealName(group.type, e.currentTarget.value);
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-lg font-semibold bg-gray-700 border border-gray-600 rounded px-2 py-1"
+                        autoFocus
+                      />
+                    ) : (
+                      <h3 
+                        className="font-semibold text-lg cursor-pointer hover:text-blue-400"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingMealName(group.type);
+                        }}
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
+                        {getMealDisplayName(group.type)}
+                      </h3>
+                    )}
+                    <div className="text-sm text-gray-400">
+                      ({group.meals.length} {group.meals.length === 1 ? 'item' : 'items'})
                     </div>
                   </div>
-                ))}
-                <button
-                  onClick={() => navigate(`/add-food?meal=${group.type}`)}
-                  className="w-full text-left text-gray-500 hover:text-blue-600 py-2 mt-2 border-t"
-                >
-                  + Add more
-                </button>
-              </>
-            )}
-          </div>
-        ))}
+                  <div className="flex items-center gap-2">
+                    {group.totalCalories > 0 && (
+                      <div className="text-sm font-medium">
+                        {group.totalCalories} cal
+                      </div>
+                    )}
+                    <svg 
+                      className={`w-5 h-5 transition-transform ${expandedMeals.has(group.type) ? 'rotate-90' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
+                
+                {expandedMeals.has(group.type) && (
+                  <div className="space-y-2">
+                    {group.meals.length === 0 ? (
+                      <Button
+                        onClick={() => navigate(`/add-food?meal=${group.type}`)}
+                        variant="ghost"
+                        className="w-full justify-start"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add {group.type}
+                      </Button>
+                    ) : (
+                      <>
+                        {group.meals.map(meal => (
+                          <div 
+                            key={meal.id} 
+                            className="p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors group"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="font-medium">{meal.food?.name}</div>
+                                <div className="text-sm text-gray-400 mt-1">
+                                  {formatWeight(meal.amount_grams, foodUnit)} • 
+                                  {Math.round((meal.food?.calories_per_100g || 0) * meal.amount_grams / 100)} cal • 
+                                  {Math.round((meal.food?.protein_per_100g || 0) * meal.amount_grams / 100)}g protein
+                                </div>
+                              </div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditMeal(meal);
+                                  }}
+                                  className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                                  title="Edit"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCopyMeal(meal);
+                                  }}
+                                  className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                                  title="Copy"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteMeal(meal.id!);
+                                  }}
+                                  className="p-2 hover:bg-red-900/50 rounded-lg transition-colors text-red-400"
+                                  title="Delete"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <Button
+                          onClick={() => navigate(`/add-food?meal=${group.type}`)}
+                          variant="ghost"
+                          className="w-full justify-start mt-2"
+                        >
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Add more
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
+          ))}
 
-        {/* Notes Section */}
-        <div className="bg-gray-800 rounded-lg shadow-md p-4">
-          <h3 className="font-semibold mb-2">Notes</h3>
-          <textarea
-            className="w-full p-2 border rounded-lg resize-none"
-            rows={3}
-            placeholder="Add notes about your day..."
-            value={nutritionLog?.notes || ''}
-            onChange={(e) => {
-              // TODO: Update notes in database
-              console.log('Update notes:', e.target.value);
-            }}
-          />
+          {/* Notes Section */}
+          <Card className="mb-6">
+            <div className="p-4">
+              <h3 className="font-semibold mb-3">Daily Notes</h3>
+              <textarea
+                className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg resize-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                rows={3}
+                placeholder="Track your hunger, energy levels, or any notes about today..."
+                value={nutritionLog?.notes || ''}
+                onChange={async (e) => {
+                  const newNotes = e.target.value;
+                  if (nutritionLog) {
+                    await createOrUpdateNutritionLog({
+                      ...nutritionLog,
+                      notes: newNotes
+                    });
+                    setNutritionLog({ ...nutritionLog, notes: newNotes });
+                  }
+                }}
+              />
             </div>
-          </div>
+          </Card>
+          
+          {/* Nutrition Timeline */}
+          <Card>
+            <div className="p-4">
+              <h3 className="font-semibold mb-3">Today's Timeline</h3>
+              <div className="text-sm text-gray-400">
+                {meals.length === 0 ? (
+                  <p>No meals logged yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {meals
+                      .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime())
+                      .map(meal => (
+                        <div key={meal.id} className="flex items-center gap-3">
+                          <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="font-medium">{format(new Date(meal.logged_at), 'h:mm a')}</span>
+                          <span className="text-gray-400">-</span>
+                          <span>{meal.food?.name}</span>
+                          <span className="text-gray-500">({meal.meal_type})</span>
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
         </div>
       </div>
     </div>

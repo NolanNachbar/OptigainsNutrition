@@ -10,8 +10,10 @@ import {
   getLatestWeeklyCheckIn,
   createOrUpdateUserProfile
 } from '../utils/database';
-import { calculateAdaptiveTDEE, getTDEERecommendations } from '../utils/adaptiveTDEE';
+import { calculateAdaptiveTDEE } from '../utils/adaptiveTDEE';
 import { WeeklyCheckIn as WeeklyCheckInType, UserNutritionProfile } from '../utils/types';
+import { getGoalConstraints, generateCalorieAdjustment, PerformanceMetrics } from '../utils/goalAdjustments';
+import { calculateAdherenceMetrics } from '../utils/adherenceScoring';
 import { startOfWeek } from 'date-fns';
 
 interface CheckInStep {
@@ -59,21 +61,55 @@ export const WeeklyCheckIn: React.FC = () => {
       // Get nutrition logs for past week
       const logs = await getNutritionLogs(user.id, 7);
       
-      // Calculate adaptive TDEE
+      // Calculate enhanced adaptive TDEE with all features
+      const biologicalData = {
+        age: 30, // Should come from user data
+        sex: 'male' as const, // Should come from user data
+        weightKg: weights[0]?.weight || 70,
+        heightCm: 175, // Should come from user data
+        bodyFatPercentage: undefined
+      };
+
+      const activityData = {
+        activityLevel: userProfile.activity_level || 'moderate' as const
+      };
+
       const tdeeData = calculateAdaptiveTDEE(
         weights,
         logs,
-        userProfile.tdee_estimate
+        userProfile.target_macros,
+        biologicalData,
+        activityData
       );
       
-      // Get recommendations
-      const recs = getTDEERecommendations(
-        tdeeData,
+      // Calculate adherence metrics
+      const adherenceMetrics = calculateAdherenceMetrics(logs, userProfile.target_macros, 7);
+      
+      // Get goal constraints
+      const constraints = getGoalConstraints(userProfile.goal_type, 'male'); // Sex should come from user data
+      
+      // Build performance metrics for adjustment calculation
+      const performance: PerformanceMetrics = {
+        actualWeeklyRate: tdeeData.weeklyChangeRate,
+        targetWeeklyRate: 0.5, // Should be stored in user profile
+        adherenceScore: adherenceMetrics.overallScore,
+        energyLevel: 3, // Will be updated from user input
+        hungerLevel: 3, // Will be updated from user input
+        trainingPerformance: 3, // Will be updated from user input
+        avgCaloriesConsumed: logs.reduce((sum, log) => sum + log.calories, 0) / logs.length,
+        loggingConsistency: adherenceMetrics.loggingConsistency
+      };
+      
+      // Generate calorie adjustment recommendation
+      const adjustment = generateCalorieAdjustment(
+        tdeeData.currentTDEE,
+        userProfile.target_macros.calories,
+        performance,
         userProfile.goal_type,
-        0.5 // Default 0.5% per week
+        constraints
       );
       
-      setRecommendations(recs);
+      setRecommendations([adjustment]);
       
       // Calculate week statistics
       const validLogs = logs.filter(log => log.calories > 0);
@@ -131,6 +167,10 @@ export const WeeklyCheckIn: React.FC = () => {
         average_calories: weekData.avgCalories,
         average_macros: weekData.avgMacros,
         adherence_percentage: weekData.adherencePercentage,
+        weight_change_kg: 0, // Calculate from weight entries
+        estimated_tdee: profile?.tdee_estimate || 2000,
+        expenditure_trend: 'stable' as const,
+        logging_days: 7,
         energy_level: energyLevel as 1 | 2 | 3 | 4 | 5,
         hunger_level: hungerLevel as 1 | 2 | 3 | 4 | 5,
         training_performance: trainingPerformance as 1 | 2 | 3 | 4 | 5,

@@ -147,12 +147,53 @@ export interface WeeklyCheckIn {
   average_calories: number;
   average_macros: Macros;
   adherence_percentage: number;
+  weight_change_kg: number;
+  estimated_tdee: number;
+  expenditure_trend: 'increasing' | 'decreasing' | 'stable';
+  logging_days: number;
   energy_level: 1 | 2 | 3 | 4 | 5;
   hunger_level: 1 | 2 | 3 | 4 | 5;
   training_performance: 1 | 2 | 3 | 4 | 5;
   notes?: string;
   photos?: string[]; // URLs to progress photos
   macro_adjustment?: Macros; // New targets after check-in
+  created_at?: string;
+}
+
+// Expenditure Data
+export interface ExpenditureData {
+  id?: string;
+  clerk_user_id: string;
+  date: string;
+  estimated_tdee: number;
+  confidence: number; // 0-100%
+  weight_kg: number;
+  calories_consumed: number;
+  weight_change_7d: number;
+  weight_change_14d: number;
+  calorie_average_7d: number;
+  calorie_average_14d: number;
+  trend: 'gaining' | 'losing' | 'maintaining';
+  algorithm_version: string;
+  created_at?: string;
+}
+
+// Habit Tracking
+export interface HabitEntry {
+  id?: string;
+  clerk_user_id: string;
+  date: string;
+  logged_food: boolean;
+  logged_weight: boolean;
+  hit_calorie_target: boolean;
+  hit_protein_target: boolean;
+  exercise_completed: boolean;
+  sleep_hours?: number;
+  water_intake_liters?: number;
+  stress_level: 1 | 2 | 3 | 4 | 5;
+  energy_level: 1 | 2 | 3 | 4 | 5;
+  hunger_level: 1 | 2 | 3 | 4 | 5;
+  notes?: string;
   created_at?: string;
 }
 
